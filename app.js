@@ -368,9 +368,9 @@
 
   /* ------------------ Google Identity Services button ------------------ */
   function initGoogleButton() {
-    const cid =
+    const cid = 
       get("rx_google_client_id") ||
-      "790326467841-otlmpn6migo30sdpbo5go1rjhvb9kqm6.apps.googleusercontent.com";
+      "790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
     function onLoaded() {
       if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
       window.google.accounts.id.initialize({
