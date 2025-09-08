@@ -1,43 +1,32 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * FIXES:
- *  - Removed stray Markdown code fences that broke parsing
- *  - renderSignIn() now wires Google button + Guest button
- *  - Admin includes Guest Portal Content editor (save + preview)
- *  - CV Open uses brand.cvURL (from Admin) instead of hardcoded link
- *  - Minor null guards + tidy localStorage helpers
+ * KEEPING YOUR CURRENT UX. Adds:
+ *  - Two landing logos (left/right) with adjustable size
+ *  - Admin → Branding & Links (logo URLs, size slider, Check-In URL, Leave URL, CV URL)
+ *  - Check-In panel opens Attendance
+ *  - Leave panel opens your Google Form
+ * All settings are stored in localStorage (no code redeploy needed).
  */
 
 (function () {
   const elApp = document.getElementById("app");
-  if (!elApp) {
-    console.error("#app container not found");
-    return;
-  }
 
   /* ------------------ Storage helpers ------------------ */
   function qs(key) {
     return new URLSearchParams(location.search).get(key) || "";
   }
   function set(k, v) {
-    try {
-      localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
-    } catch (e) {
-      console.warn("localStorage.set failed", e);
-    }
+    localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
   }
   function get(k) {
     try {
       const v = localStorage.getItem(k);
-      if (v == null) return null;
-      const t = v.trim();
-      return t[0] === "{" || t[0] === "[" ? JSON.parse(t) : v;
-    } catch (e) {
-      console.warn("localStorage.get parse failed", e);
+      return v && (v[0] === "{" || v[0] === "[") ? JSON.parse(v) : v;
+    } catch (_) {
       return null;
     }
   }
   function del(k) {
-    try { localStorage.removeItem(k); } catch (_) {}
+    localStorage.removeItem(k);
   }
 
   /* ------------------ API URL wiring ------------------ */
@@ -70,8 +59,10 @@
 
   /* ------------------ Branding / Links (local settings) ------------------ */
   const DEFAULTS = {
-    logoLeft: "https://files.catbox.moe/8c0x7w.png", // fallback (Rover X) – replace in Admin
-    logoRight: "https://files.catbox.moe/3j1q2a.png", // fallback (Tipsy Ninjas) – replace in Admin
+    logoLeft:
+      "https://files.catbox.moe/8c0x7w.png", // fallback (Rover X) – replace in Admin
+    logoRight:
+      "https://files.catbox.moe/3j1q2a.png", // fallback (Tipsy Ninjas) – replace in Admin
     logoSize: 120, // px
     checkInURL:
       "https://docs.google.com/spreadsheets/d/19DbytZMQborRmbqvDbb9gAJqdu_ClmuLTdVTklDxEfA/edit?usp=sharing",
@@ -89,36 +80,19 @@
     return next;
   }
 
-  /* ------------------ Guest Portal editable copy ------------------ */
-  function getGuestContent() {
-    const defaults = {
-      roverAbout:
-        "Rover X is a leading logistics and transportation company, committed to delivering excellence in every mile. We pride ourselves on innovation, reliability, and building strong relationships with our clients and team members.",
-      roverWhy:
-        "Join our growing team and be part of a company that values your contribution. We offer competitive compensation, comprehensive benefits, career development opportunities, and a supportive work environment where your success is our success.",
-      tipsyAbout:
-        "Tipsy Ninjas brings excitement and exceptional service to the hospitality and events industry. We create unforgettable experiences through creativity, attention to detail, and a passion for bringing people together.",
-      tipsyWhy:
-        "Be part of an energetic team that celebrates creativity and excellence. We offer flexible schedules, competitive pay, opportunities for growth, and the chance to work in a fun, dynamic environment where every day is different.",
-    };
-    const current = get("rx_guest_content");
-    return { ...defaults, ...(current || {}) };
-  }
-  function setGuestContent(content) {
-    set("rx_guest_content", content);
-  }
-
   /* ------------------ API helper ------------------ */
   async function apiCall(action, body) {
     // const api = API();
-    // if (!api) throw new Error("API URL not set. Open with ?api=https://.../exec");
-    // Hardcode to avoid manual query params
-    const api =
-      "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
+    // if (!api)
+    //   throw new Error(
+    //     "API URL not set. Open with ?api=https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec"
+    //   );
+    // add api value directly
+    const api = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
     const r = await fetch(api, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...(body || {}) }),
+      body: JSON.stringify({ action, ...body }),
     });
     return r.json();
   }
@@ -146,112 +120,33 @@
       </div>
     `;
 
-    const guestBtn = document.getElementById("guestBtn");
-    if (guestBtn) guestBtn.onclick = renderGuestCV;
+    document.getElementById("guestBtn").onclick = () => renderGuestCV();
     initGoogleButton();
   }
 
-  // Guest CV Landing (enhanced)
   function renderGuestCV() {
     const brand = getBrand();
-    const guestContent = getGuestContent();
-
     elApp.innerHTML = `
       <div class="center">
-        <div class="card guest-portal" style="width:min(94vw,600px)">
-          <!-- Header with both logos -->
+        <div class="card" style="width:min(94vw,520px)">
           <div class="brand-logos">
-            <img src="${brand.logoLeft}" alt="Rover X" style="width:${brand.logoSize}px">
-            <img src="${brand.logoRight}" alt="Tipsy Ninjas" style="width:${brand.logoSize}px">
+            <img src="${brand.logoLeft}" alt="" style="width:${brand.logoSize}px">
+            <img src="${brand.logoRight}" alt="" style="width:${brand.logoSize}px">
           </div>
-          <div class="h1" style="text-align:center;margin:16px 0 8px">Apply to Join Our Team</div>
-          <div class="sub" style="text-align:center;margin-bottom:24px">Choose your preferred company</div>
+          <div class="h2" style="text-align:center">CV Application</div>
+          <div class="kv" style="text-align:center;margin-bottom:16px">Guest access only — opens your CV Google Form.</div>
 
-          <!-- Company Selection Cards -->
-          <div class="company-cards">
-            <div class="company-card rover-card" id="roverCard">
-              <div class="company-header">
-                <img src="${brand.logoLeft}" alt="Rover X" class="company-logo">
-                <h3>Rover X</h3>
-                <p class="company-tagline">Logistics & Transportation</p>
-              </div>
-              <div class="company-content">
-                <div class="about-section">
-                  <h4>About Us</h4>
-                  <p>${guestContent.roverAbout}</p>
-                </div>
-                <div class="why-join-section">
-                  <h4>Why Join Rover X?</h4>
-                  <p>${guestContent.roverWhy}</p>
-                </div>
-              </div>
-              <button class="apply-btn rover-btn" data-company="roverx">🚛 Apply to Rover X</button>
-            </div>
-
-            <div class="company-card tipsy-card" id="tipsyCard">
-              <div class="company-header">
-                <img src="${brand.logoRight}" alt="Tipsy Ninjas" class="company-logo">
-                <h3>Tipsy Ninjas</h3>
-                <p class="company-tagline">Hospitality & Events</p>
-              </div>
-              <div class="company-content">
-                <div class="about-section">
-                  <h4>About Us</h4>
-                  <p>${guestContent.tipsyAbout}</p>
-                </div>
-                <div class="why-join-section">
-                  <h4>Why Join Tipsy Ninjas?</h4>
-                  <p>${guestContent.tipsyWhy}</p>
-                </div>
-              </div>
-              <button class="apply-btn tipsy-btn" data-company="tipsy">🍹 Apply to Tipsy Ninjas</button>
-            </div>
-          </div>
-
-          <!-- Navigation -->
-          <div class="guest-nav">
-            <button class="btn" id="backSignIn">⬅ Back to Sign-In</button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    const back = document.getElementById("backSignIn");
-    if (back) back.onclick = renderSignIn;
-
-    document.querySelectorAll('.apply-btn').forEach((btn) => {
-      btn.onclick = () => {
-        const company = btn.getAttribute('data-company');
-        openCVApplication(company);
-      };
-    });
-  }
-
-  function openCVApplication(company) {
-    const brand = getBrand();
-    const cvURL = brand.cvURL;
-
-    elApp.innerHTML = `
-      <div class="center">
-        <div class="card" style="width:min(94vw,480px)">
-          <div class="h2" style="text-align:center">Opening Application Form</div>
-          <div class="kv" style="text-align:center;margin:16px 0">
-            You're applying to <b>${company === 'roverx' ? 'Rover X' : 'Tipsy Ninjas'}</b>
-          </div>
-          <div class="space"></div>
           <div class="row" style="flex-direction:column">
-            <a class="btn btn-blue" target="_blank" rel="noopener noreferrer" href="${cvURL}">📄 Open Application Form</a>
-            <button class="btn" id="backToGuest">⬅ Back to Company Selection</button>
-            <button class="btn btn-green" id="doneBack">✔ I've submitted my application</button>
+            <a class="btn btn-blue" target="_blank" rel="noopener noreferrer"
+               href="${brand.cvURL}">📄 Open CV Form Application</a>
+            <button class="btn" id="backSignIn">⬅ Back to Sign-In</button>
+            <button class="btn btn-green" id="doneBack">✔ I’ve submitted — Go back</button>
           </div>
         </div>
       </div>
     `;
-
-    const backGuest = document.getElementById("backToGuest");
-    if (backGuest) backGuest.onclick = renderGuestCV;
-    const done = document.getElementById("doneBack");
-    if (done) done.onclick = renderSignIn;
+    document.getElementById("backSignIn").onclick = renderSignIn;
+    document.getElementById("doneBack").onclick = renderSignIn;
   }
 
   function renderDashboard() {
@@ -287,12 +182,11 @@
       </div>
     `;
 
-    const so = document.getElementById("signOutBtn");
-    if (so) so.onclick = signOut;
+    document.getElementById("signOutBtn").onclick = signOut;
 
     const first = document.querySelector(".tab") || null;
     const open = first ? first.getAttribute("data-tab") : null;
-    if (open) openPanel(open);
+    open && openPanel(open);
 
     document.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -307,20 +201,17 @@
       if (key === "leave") return renderLeave();
       if (key === "dailysale") return renderDailySale();
       if (key === "admin") return renderAdmin();
-      const p = document.getElementById("panel");
-      if (p) p.innerHTML = "";
+      document.getElementById("panel").innerHTML = "";
     }
   }
 
   function renderCheckIn() {
     const s = getSession();
     const brand = getBrand();
-    const p = document.getElementById("panel");
-    if (!p) return;
-    p.innerHTML = `
+    document.getElementById("panel").innerHTML = `
       <div class="card">
         <div class="h2">Check In</div>
-        <div class="kv">Signed in as <b>${s?.name || s?.email || ""}</b></div>
+        <div class="kv">Signed in as <b>${s.name || s.email}</b></div>
         <div class="space"></div>
         <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.checkInURL}">↗ Open Attendance </a>
         <div class="kv" style="margin-top:6px">This opens your existing Google Sheet in a new tab.</div>
@@ -330,9 +221,7 @@
 
   function renderLeave() {
     const brand = getBrand();
-    const p = document.getElementById("panel");
-    if (!p) return;
-    p.innerHTML = `
+    document.getElementById("panel").innerHTML = `
       <div class="card">
         <div class="h2">Leave Form</div>
         <div class="space"></div>
@@ -343,11 +232,9 @@
 
   function renderDailySale() {
     const s = getSession();
-    const list = s?.sheets || [];
+    const list = s.sheets || [];
     const has = list && list.length > 0;
-    const p = document.getElementById("panel");
-    if (!p) return;
-    p.innerHTML = `
+    document.getElementById("panel").innerHTML = `
       <div class="card">
         <div class="h2">Daily Sale</div>
         ${!has ? `<div class="kv">No linked sheets for your account.</div>` : ""}
@@ -356,7 +243,6 @@
       </div>
     `;
     const el = document.getElementById("dsList");
-    if (!el) return;
     list.forEach((it) => {
       const a = document.createElement("a");
       a.className = "item";
@@ -368,14 +254,11 @@
     });
   }
 
-  /* ------------------ Admin (Approvals + Branding & Links + Guest Content) ------------------ */
+  /* ------------------ Admin (Approvals + Branding & Links) ------------------ */
   function renderAdmin() {
-    const p = document.getElementById("panel");
-    if (!p) return;
+    const el = document.getElementById("panel");
     const brand = getBrand();
-    const guestContent = getGuestContent();
-
-    p.innerHTML = `
+    el.innerHTML = `
       <div class="card">
         <div class="row" style="justify-content:space-between">
           <div class="h2">Admin — Approvals</div>
@@ -406,45 +289,18 @@
           <button class="btn" id="previewBrand">Preview on Sign-In</button>
         </div>
       </div>
-
-      <div class="space-lg"></div>
-
-      <div class="card">
-        <div class="h2">Guest Portal Content</div>
-        <div class="kv" style="margin-bottom:16px">Edit the About Us and Why Join sections for both companies</div>
-        <div class="guest-content-form">
-          <div class="company-content-section">
-            <h4 style="color:var(--rx-blue);margin:0 0 8px">Rover X Content</h4>
-            <label class="kv">About Us <textarea id="roverAbout" class="text" rows="3" placeholder="About Rover X...">${guestContent.roverAbout}</textarea></label>
-            <label class="kv">Why Join Us <textarea id="roverWhy" class="text" rows="3" placeholder="Why join Rover X...">${guestContent.roverWhy}</textarea></label>
-          </div>
-          <div class="company-content-section">
-            <h4 style="color:#8b5cf6;margin:16px 0 8px">Tipsy Ninjas Content</h4>
-            <label class="kv">About Us <textarea id="tipsyAbout" class="text" rows="3" placeholder="About Tipsy Ninjas...">${guestContent.tipsyAbout}</textarea></label>
-            <label class="kv">Why Join Us <textarea id="tipsyWhy" class="text" rows="3" placeholder="Why join Tipsy Ninjas...">${guestContent.tipsyWhy}</textarea></label>
-          </div>
-        </div>
-        <div class="space"></div>
-        <div class="row">
-          <button class="btn btn-blue" id="saveGuestContent">Save Guest Content</button>
-          <button class="btn" id="previewGuest">Preview Guest Portal</button>
-        </div>
-      </div>
     `;
 
     // Approvals
-    const refresh = document.getElementById("refreshBtn");
-    if (refresh) refresh.onclick = loadPending;
+    document.getElementById("refreshBtn").onclick = loadPending;
 
     async function loadPending() {
       try {
-        const err = document.getElementById("error");
-        if (err) err.textContent = "";
+        document.getElementById("error").textContent = "";
         const res = await apiCall("listPending");
         if (!res.ok) throw new Error(res.error || "Failed to load");
         const rows = res.pending || [];
         const list = document.getElementById("pendingList");
-        if (!list) return;
         list.innerHTML = "";
         if (rows.length === 0) {
           list.innerHTML = `<div class="kv">No pending requests.</div>`;
@@ -470,24 +326,25 @@
             </div>
           `;
           const sel = row.querySelector(".roleSel");
-          if (sel) sel.addEventListener("change", async (e) => {
+          sel.addEventListener("change", async (e) => {
             await apiCall("setRole", { target: r.email, role: e.target.value });
           });
-          const revoke = row.querySelector('[data-act="revoke"]');
-          if (revoke) revoke.addEventListener("click", async () => {
-            await apiCall("revoke", { target: r.email });
-            await loadPending();
-          });
-          const approve = row.querySelector('[data-act="approve"]');
-          if (approve) approve.addEventListener("click", async () => {
-            await apiCall("approve", { target: r.email });
-            await loadPending();
-          });
+          row
+            .querySelector('[data-act="revoke"]')
+            .addEventListener("click", async () => {
+              await apiCall("revoke", { target: r.email });
+              await loadPending();
+            });
+          row
+            .querySelector('[data-act="approve"]')
+            .addEventListener("click", async () => {
+              await apiCall("approve", { target: r.email });
+              await loadPending();
+            });
           list.appendChild(row);
         });
       } catch (err) {
-        const e = document.getElementById("error");
-        if (e) e.textContent = String(err);
+        document.getElementById("error").textContent = String(err);
       }
     }
     loadPending();
@@ -495,48 +352,27 @@
     // Branding form
     const sizeInput = document.getElementById("logoSize");
     const sizeVal = document.getElementById("logoSizeVal");
-    if (sizeInput && sizeVal) {
-      sizeInput.addEventListener("input", () => (sizeVal.textContent = sizeInput.value + "px"));
-    }
+    sizeInput.addEventListener("input", () => (sizeVal.textContent = sizeInput.value + "px"));
 
-    const saveBrand = document.getElementById("saveBrand");
-    if (saveBrand)
-      saveBrand.onclick = () => {
-        setBrand({
-          logoLeft: (document.getElementById("logoLeft").value || "").trim(),
-          logoRight: (document.getElementById("logoRight").value || "").trim(),
-          logoSize: parseInt(document.getElementById("logoSize").value, 10) || 120,
-          checkInURL: (document.getElementById("checkInURL").value || "").trim(),
-          leaveURL: (document.getElementById("leaveURL").value || "").trim(),
-          cvURL: (document.getElementById("cvURL").value || "").trim(),
-        });
-        alert("Saved. Refresh to see everywhere, or Preview.");
-      };
-    const previewBrand = document.getElementById("previewBrand");
-    if (previewBrand) previewBrand.onclick = renderSignIn;
-
-    // Guest content handlers
-    const saveGuestContentBtn = document.getElementById("saveGuestContent");
-    if (saveGuestContentBtn)
-      saveGuestContentBtn.onclick = () => {
-        setGuestContent({
-          roverAbout: (document.getElementById("roverAbout").value || "").trim(),
-          roverWhy: (document.getElementById("roverWhy").value || "").trim(),
-          tipsyAbout: (document.getElementById("tipsyAbout").value || "").trim(),
-          tipsyWhy: (document.getElementById("tipsyWhy").value || "").trim(),
-        });
-        alert("Guest portal content saved!");
-      };
-    const previewGuest = document.getElementById("previewGuest");
-    if (previewGuest) previewGuest.onclick = renderGuestCV;
+    document.getElementById("saveBrand").onclick = () => {
+      setBrand({
+        logoLeft: document.getElementById("logoLeft").value.trim(),
+        logoRight: document.getElementById("logoRight").value.trim(),
+        logoSize: parseInt(document.getElementById("logoSize").value, 10) || 120,
+        checkInURL: document.getElementById("checkInURL").value.trim(),
+        leaveURL: document.getElementById("leaveURL").value.trim(),
+        cvURL: document.getElementById("cvURL").value.trim(),
+      });
+      alert("Saved. Refresh to see everywhere, or Preview.");
+    };
+    document.getElementById("previewBrand").onclick = renderSignIn;
   }
 
   /* ------------------ Google Identity Services button ------------------ */
   function initGoogleButton() {
-    const cid =
+    const cid = 
       get("rx_google_client_id") ||
       "790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
-
     function onLoaded() {
       if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
       window.google.accounts.id.initialize({
@@ -574,7 +410,6 @@
         });
       }
     }
-
     if (window.google && window.google.accounts && window.google.accounts.id) onLoaded();
     else {
       const t = setInterval(() => {
@@ -592,7 +427,7 @@
       <div class="center">
         <div class="card" style="width:min(94vw,520px)">
           <div class="h2" style="text-align:center">Your account setup is underway</div>
-          <div class="kv" style="text-align:center">Signed in as <b>${s?.email || ""}</b></div>
+          <div class="kv" style="text-align:center">Signed in as <b>${s.email}</b></div>
           <div class="space"></div>
           <div class="kv" style="text-align:center">You may enter as Guest to access the CV Application while you wait.</div>
           <div class="space"></div>
@@ -603,10 +438,8 @@
         </div>
       </div>
     `;
-    const back = document.getElementById("backLogin");
-    if (back) back.onclick = renderSignIn;
-    const guest = document.getElementById("guestEnter");
-    if (guest) guest.onclick = renderGuestCV;
+    document.getElementById("backLogin").onclick = renderSignIn;
+    document.getElementById("guestEnter").onclick = renderGuestCV;
   }
 
   /* ------------------ Boot ------------------ */
@@ -617,3 +450,185 @@
     renderSignIn();
   }
 })();
+
+styles.css 
+
+:root{
+  --rx-blue:#4f628e;
+  --rx-pink:#f69788;     /* peach */
+  --tn-black:#231f20;
+  --tn-red:#ed1c24;
+  --text:#111827;
+  --muted:#6b7280;
+  --bg:#f8fafc;
+  --card:#ffffff;
+  --border:#e5e7eb;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  color:var(--text);
+  background:var(--bg);
+}
+
+.container{max-width:980px;margin:0 auto;padding:16px}
+.center{display:grid;place-items:center;min-height:100vh}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.05);
+}
+
+.brand{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.brand img{width:180px;height:auto;border-radius:14px;box-shadow:0 10px 25px rgba(0,0,0,.08);}
+.brand .h1{font-size:26px;font-weight:800;margin:14px 0 6px}
+.brand .sub{font-size:14px;color:#2563eb;margin:0 0 4px}
+
+.h1{font-size:28px;font-weight:800;margin:0 0 8px}
+.h2{font-size:20px;font-weight:700;margin:0 0 8px}
+.sub{font-size:14px;color:#2563eb;margin-bottom:16px}
+
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.space{height:12px}
+.space-lg{height:24px}
+
+.btn{
+  appearance:none;border:1px solid var(--border);background:#fff;
+  border-radius:999px;padding:12px 16px;cursor:pointer;color:#111;
+  font-weight:600;transition:background-color .15s,border-color .15s,color .15s,transform .05s;
+  width:100%;
+}
+.btn:hover{background:#f9fafb}
+.btn-primary{background:#111;color:#fff;border-color:#111}
+.btn-primary:hover{background:#000}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn-green{background:#16a34a;border-color:#16a34a;color:#fff}
+.btn-blue{background:#2563eb;border-color:#2563eb;color:#fff}
+
+.divider{display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:12px;margin:12px 0}
+.divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--border)}
+
+.tag{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:4px 10px;font-size:12px}
+
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tab{padding:10px 14px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#fff}
+.tab.active{background:var(--rx-pink);border-color:var(--rx-pink);color:#111}
+
+.list{display:grid;gap:8px}
+.item{padding:12px;border:1px solid var(--border);border-radius:12px;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.item .meta{color:var(--muted);font-size:13px}
+
+.kv{font-size:14px;color:var(--muted)}
+.kv b{color:var(--text)}
+
+.link{color:#2563eb;text-decoration:none}
+.link:hover{text-decoration:underline}
+
+.footer{margin-top:16px;font-size:12px;color:var(--muted);text-align:center}
+
+/* Two logos row on landing */
+.brand-logos{
+  display:flex;
+  gap:18px;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:8px;
+}
+.text{
+  width:100%;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+}
+
+/* ---- Fix spacing/overlap for heading, tabs, and first button ---- */
+.container{ padding:24px 16px; }
+
+/* Title + meta */
+.h1{ margin:0 0 8px; line-height:1.2; }
+.kv{ margin:4px 0; line-height:1.4; }
+
+/* Tabs row */
+.tabs{
+  display:flex;
+  flex-wrap:wrap;        /* keep pills from colliding on smaller widths */
+  gap:10px;
+  margin:12px 0 16px;    /* space from the meta and the card below */
+}
+.tab{
+  line-height:1;         /* stop pill from “growing” vertically */
+  padding:10px 14px;
+  border-radius:999px;
+}
+
+/* Cards + first controls */
+.card{ padding:20px; }
+.card .h2{ margin:0 0 6px; }
+.card .kv + .btn,
+.card .kv + a.btn{
+  margin-top:10px;       /* space between “Signed in as …” and the button */
+}
+
+/* Buttons/links behave as blocks, no overlap with text lines */
+a.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  text-decoration:none;
+  text-underline-offset:3px;
+}
+
+/* ===================== */
+/*  PEACH INTERACTIONS   */
+/* ===================== */
+
+/* Tab hover/press for consistency with active */
+.tab:hover{ background:#ffe9e5; border-color:var(--rx-pink); }
+.tab:active{ background:var(--rx-pink); border-color:var(--rx-pink); color:#111; }
+
+/* All buttons go peach on hover/press (match .tab.active) */
+.btn:hover,
+.btn:active,
+a.btn:hover,
+a.btn:active{
+  background:var(--rx-pink);
+  border-color:var(--rx-pink);
+  color:#111;
+}
+
+/* Add a tiny press feedback */
+.btn:active,
+a.btn:active{ transform:translateY(1px); }
+
+/* Variant buttons also go peach on hover/press */
+.btn-primary:hover,.btn-primary:active,
+.btn-blue:hover,.btn-blue:active,
+.btn-green:hover,.btn-green:active{
+  background:var(--rx-pink) !important;
+  border-color:var(--rx-pink) !important;
+  color:#111 !important;
+}
+
+/* Keyboard focus rings */
+.btn:focus-visible,
+a.btn:focus-visible,
+.tab:focus-visible{
+  outline:2px solid var(--rx-pink);
+  outline-offset:2px;
+  box-shadow:none;
+}
+
+/* Disabled safety */
+.btn:disabled,.btn.disabled{
+  opacity:.6;
+  cursor:not-allowed;
+  filter:grayscale(10%);
+}
