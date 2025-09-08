@@ -2,7 +2,7 @@
  * KEEPING YOUR CURRENT UX. Adds:
  *  - Two landing logos (left/right) with adjustable size
  *  - Admin → Branding & Links (logo URLs, size slider, Check-In URL, Leave URL, CV URL)
- *  - Check-In panel opens your Attendance Sheet
+ *  - Check-In panel opens Attendance
  *  - Leave panel opens your Google Form
  * All settings are stored in localStorage (no code redeploy needed).
  */
