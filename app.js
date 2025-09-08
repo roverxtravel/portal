@@ -213,7 +213,7 @@
         <div class="h2">Check In</div>
         <div class="kv">Signed in as <b>${s.name || s.email}</b></div>
         <div class="space"></div>
-        <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.checkInURL}">↗ Open Attendance Sheet</a>
+        <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.checkInURL}">↗ Open Attendance </a>
         <div class="kv" style="margin-top:6px">This opens your existing Google Sheet in a new tab.</div>
       </div>
     `;
