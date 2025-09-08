@@ -120,34 +120,186 @@
       </div>
     `;
 
-    document.getElementById("guestBtn").onclick = () => renderGuestCV();
-    initGoogleButton();
-  }
+```javascript
+// Replace your existing renderGuestCV function with this enhanced version
+function renderGuestCV() {
+  const brand = getBrand();
+  const guestContent = getGuestContent(); // New function for editable guest content
+  
+  elApp.innerHTML = `
+    <div class="center">
+      <div class="card guest-portal" style="width:min(94vw,600px)">
+        <!-- Header with both logos -->
+        <div class="brand-logos">
+          <img src="${brand.logoLeft}" alt="Rover X" style="width:${brand.logoSize}px">
+          <img src="${brand.logoRight}" alt="Tipsy Ninjas" style="width:${brand.logoSize}px">
+        </div>
+        <div class="h1" style="text-align:center;margin:16px 0 8px">Apply to Join Our Team</div>
+        <div class="sub" style="text-align:center;margin-bottom:24px">Choose your preferred company</div>
 
-  function renderGuestCV() {
-    const brand = getBrand();
-    elApp.innerHTML = `
-      <div class="center">
-        <div class="card" style="width:min(94vw,520px)">
-          <div class="brand-logos">
-            <img src="${brand.logoLeft}" alt="" style="width:${brand.logoSize}px">
-            <img src="${brand.logoRight}" alt="" style="width:${brand.logoSize}px">
+        <!-- Company Selection Cards -->
+        <div class="company-cards">
+          <div class="company-card rover-card" id="roverCard">
+            <div class="company-header">
+              <img src="${brand.logoLeft}" alt="Rover X" class="company-logo">
+              <h3>Rover X</h3>
+              <p class="company-tagline">Logistics & Transportation</p>
+            </div>
+            <div class="company-content">
+              <div class="about-section">
+                <h4>About Us</h4>
+                <p>${guestContent.roverAbout}</p>
+              </div>
+              <div class="why-join-section">
+                <h4>Why Join Rover X?</h4>
+                <p>${guestContent.roverWhy}</p>
+              </div>
+            </div>
+            <button class="apply-btn rover-btn" data-company="roverx">
+              🚛 Apply to Rover X
+            </button>
           </div>
-          <div class="h2" style="text-align:center">CV Application</div>
-          <div class="kv" style="text-align:center;margin-bottom:16px">Guest access only — opens your CV Google Form.</div>
 
-          <div class="row" style="flex-direction:column">
-            <a class="btn btn-blue" target="_blank" rel="noopener noreferrer"
-               href="${brand.cvURL}">📄 Open CV Form Application</a>
-            <button class="btn" id="backSignIn">⬅ Back to Sign-In</button>
-            <button class="btn btn-green" id="doneBack">✔ I’ve submitted — Go back</button>
+          <div class="company-card tipsy-card" id="tipsyCard">
+            <div class="company-header">
+              <img src="${brand.logoRight}" alt="Tipsy Ninjas" class="company-logo">
+              <h3>Tipsy Ninjas</h3>
+              <p class="company-tagline">Hospitality & Events</p>
+            </div>
+            <div class="company-content">
+              <div class="about-section">
+                <h4>About Us</h4>
+                <p>${guestContent.tipsyAbout}</p>
+              </div>
+              <div class="why-join-section">
+                <h4>Why Join Tipsy Ninjas?</h4>
+                <p>${guestContent.tipsyWhy}</p>
+              </div>
+            </div>
+            <button class="apply-btn tipsy-btn" data-company="tipsy">
+              🍹 Apply to Tipsy Ninjas
+            </button>
           </div>
         </div>
+
+        <!-- Navigation -->
+        <div class="guest-nav">
+          <button class="btn" id="backSignIn">⬅ Back to Sign-In</button>
+        </div>
       </div>
-    `;
-    document.getElementById("backSignIn").onclick = renderSignIn;
-    document.getElementById("doneBack").onclick = renderSignIn;
-  }
+    </div>
+  `;
+
+  // Event listeners
+  document.getElementById("backSignIn").onclick = renderSignIn;
+  
+  // Apply button handlers
+  document.querySelectorAll('.apply-btn').forEach(btn => {
+    btn.onclick = () => {
+      const company = btn.getAttribute('data-company');
+      openCVApplication(company);
+    };
+  });
+}
+
+// New function to handle CV application opening
+function openCVApplication(company) {
+  const cvURL = "https://docs.google.com/forms/d/e/1FAIpQLSdrSpvSZaudwPHhfC_ZTKxf-jVkrP6ogvlcuFCG3s08u3w0fQ/viewform";
+  
+  // Show confirmation modal before opening
+  elApp.innerHTML = `
+    <div class="center">
+      <div class="card" style="width:min(94vw,480px)">
+        <div class="h2" style="text-align:center">Opening Application Form</div>
+        <div class="kv" style="text-align:center;margin:16px 0">
+          You're applying to <b>${company === 'roverx' ? 'Rover X' : 'Tipsy Ninjas'}</b>
+        </div>
+        <div class="space"></div>
+        <div class="row" style="flex-direction:column">
+          <a class="btn btn-blue" target="_blank" rel="noopener noreferrer" href="${cvURL}">
+            📄 Open Application Form
+          </a>
+          <button class="btn" id="backToGuest">⬅ Back to Company Selection</button>
+          <button class="btn btn-green" id="doneBack">✔ I've submitted my application</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById("backToGuest").onclick = renderGuestCV;
+  document.getElementById("doneBack").onclick = renderSignIn;
+}
+
+// New function to get/set guest portal content
+function getGuestContent() {
+  const defaults = {
+    roverAbout: "Rover X is a leading logistics and transportation company, committed to delivering excellence in every mile. We pride ourselves on innovation, reliability, and building strong relationships with our clients and team members.",
+    roverWhy: "Join our growing team and be part of a company that values your contribution. We offer competitive compensation, comprehensive benefits, career development opportunities, and a supportive work environment where your success is our success.",
+    tipsyAbout: "Tipsy Ninjas brings excitement and exceptional service to the hospitality and events industry. We create unforgettable experiences through creativity, attention to detail, and a passion for bringing people together.",
+    tipsyWhy: "Be part of an energetic team that celebrates creativity and excellence. We offer flexible schedules, competitive pay, opportunities for growth, and the chance to work in a fun, dynamic environment where every day is different."
+  };
+  
+  const current = get("rx_guest_content");
+  return { ...defaults, ...(current || {}) };
+}
+
+function setGuestContent(content) {
+  set("rx_guest_content", content);
+}
+```
+
+📄 app.js - Add Guest Content Management to your existing `renderAdmin()` function:
+
+Add this section right after your existing "Branding & Links" card in the `renderAdmin()` function:
+
+```javascript
+// Add this inside renderAdmin() function, after the existing "Branding & Links" card
+      <div class="space-lg"></div>
+
+      <div class="card">
+        <div class="h2">Guest Portal Content</div>
+        <div class="kv" style="margin-bottom:16px">Edit the About Us and Why Join sections for both companies</div>
+        <div class="guest-content-form">
+          <div class="company-content-section">
+            <h4 style="color:var(--rx-blue);margin:0 0 8px">Rover X Content</h4>
+            <label class="kv">About Us <textarea id="roverAbout" class="text" rows="3" placeholder="About Rover X...">${guestContent.roverAbout}</textarea></label>
+            <label class="kv">Why Join Us <textarea id="roverWhy" class="text" rows="3" placeholder="Why join Rover X...">${guestContent.roverWhy}</textarea></label>
+          </div>
+          
+          <div class="company-content-section">
+            <h4 style="color:#8b5cf6;margin:16px 0 8px">Tipsy Ninjas Content</h4>
+            <label class="kv">About Us <textarea id="tipsyAbout" class="text" rows="3" placeholder="About Tipsy Ninjas...">${guestContent.tipsyAbout}</textarea></label>
+            <label class="kv">Why Join Us <textarea id="tipsyWhy" class="text" rows="3" placeholder="Why join Tipsy Ninjas...">${guestContent.tipsyWhy}</textarea></label>
+          </div>
+        </div>
+        <div class="space"></div>
+        <div class="row">
+          <button class="btn btn-blue" id="saveGuestContent">Save Guest Content</button>
+          <button class="btn" id="previewGuest">Preview Guest Portal</button>
+        </div>
+      </div>
+```
+
+And add these event handlers in the same `renderAdmin()` function, after your existing event handlers:
+
+```javascript
+// Add these after your existing event handlers in renderAdmin()
+    const guestContent = getGuestContent();
+
+    // Guest content handlers
+    document.getElementById("saveGuestContent").onclick = () => {
+      setGuestContent({
+        roverAbout: document.getElementById("roverAbout").value.trim(),
+        roverWhy: document.getElementById("roverWhy").value.trim(),
+        tipsyAbout: document.getElementById("tipsyAbout").value.trim(),
+        tipsyWhy: document.getElementById("tipsyWhy").value.trim(),
+      });
+      alert("Guest portal content saved!");
+    };
+    
+    document.getElementById("previewGuest").onclick = renderGuestCV;
+```
+
 
   function renderDashboard() {
     const s = getSession();
