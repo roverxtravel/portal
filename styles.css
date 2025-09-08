@@ -177,3 +177,34 @@ a.btn:focus-visible,
   cursor:not-allowed;
   filter:grayscale(10%);
 }
+/* === Peach interactions add-on (append only) === */
+
+/* Tabs: hover/press to match active peach */
+.tab:hover{
+  background:#ffe9e5;
+  border-color:var(--rx-pink);
+}
+.tab:active{
+  background:var(--rx-pink);
+  border-color:var(--rx-pink);
+  color:#111;
+}
+
+/* Buttons: turn peach on hover/press */
+.btn:hover,
+.btn:active,
+a.btn:hover,
+a.btn:active{
+  background:var(--rx-pink);
+  border-color:var(--rx-pink);
+  color:#111;
+}
+
+/* Variant buttons: force peach on hover/press */
+.btn-primary:hover,.btn-primary:active,
+.btn-blue:hover,.btn-blue:active,
+.btn-green:hover,.btn-green:active{
+  background:var(--rx-pink) !important;
+  border-color:var(--rx-pink) !important;
+  color:#111 !important;
+}
