@@ -65,7 +65,7 @@
       "https://files.catbox.moe/3j1q2a.png", // fallback (Tipsy Ninjas) – replace in Admin
     logoSize: 120, // px
     checkInURL:
-      "https://docs.google.com/spreadsheets/d/19DbytZMQborRmbqvDbb9gAJqdu_ClmuLTdVTklDxEfA/edit?usp=sharing",
+      "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
     leaveURL: "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL:
       "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
