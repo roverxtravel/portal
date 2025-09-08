@@ -1,7 +1,6 @@
-
 :root{
   --rx-blue:#4f628e;
-  --rx-pink:#f69788;
+  --rx-pink:#f69788;     /* peach */
   --tn-black:#231f20;
   --tn-red:#ed1c24;
   --text:#111827;
@@ -49,7 +48,8 @@ body{
 .btn{
   appearance:none;border:1px solid var(--border);background:#fff;
   border-radius:999px;padding:12px 16px;cursor:pointer;color:#111;
-  font-weight:600;transition:.15s; width:100%;
+  font-weight:600;transition:background-color .15s,border-color .15s,color .15s,transform .05s;
+  width:100%;
 }
 .btn:hover{background:#f9fafb}
 .btn-primary{background:#111;color:#fff;border-color:#111}
@@ -78,6 +78,7 @@ body{
 .link:hover{text-decoration:underline}
 
 .footer{margin-top:16px;font-size:12px;color:var(--muted);text-align:center}
+
 /* Two logos row on landing */
 .brand-logos{
   display:flex;
@@ -92,6 +93,7 @@ body{
   border:1px solid var(--border);
   border-radius:10px;
 }
+
 /* ---- Fix spacing/overlap for heading, tabs, and first button ---- */
 .container{ padding:24px 16px; }
 
@@ -129,3 +131,49 @@ a.btn{
   text-underline-offset:3px;
 }
 
+/* ===================== */
+/*  PEACH INTERACTIONS   */
+/* ===================== */
+
+/* Tab hover/press for consistency with active */
+.tab:hover{ background:#ffe9e5; border-color:var(--rx-pink); }
+.tab:active{ background:var(--rx-pink); border-color:var(--rx-pink); color:#111; }
+
+/* All buttons go peach on hover/press (match .tab.active) */
+.btn:hover,
+.btn:active,
+a.btn:hover,
+a.btn:active{
+  background:var(--rx-pink);
+  border-color:var(--rx-pink);
+  color:#111;
+}
+
+/* Add a tiny press feedback */
+.btn:active,
+a.btn:active{ transform:translateY(1px); }
+
+/* Variant buttons also go peach on hover/press */
+.btn-primary:hover,.btn-primary:active,
+.btn-blue:hover,.btn-blue:active,
+.btn-green:hover,.btn-green:active{
+  background:var(--rx-pink) !important;
+  border-color:var(--rx-pink) !important;
+  color:#111 !important;
+}
+
+/* Keyboard focus rings */
+.btn:focus-visible,
+a.btn:focus-visible,
+.tab:focus-visible{
+  outline:2px solid var(--rx-pink);
+  outline-offset:2px;
+  box-shadow:none;
+}
+
+/* Disabled safety */
+.btn:disabled,.btn.disabled{
+  opacity:.6;
+  cursor:not-allowed;
+  filter:grayscale(10%);
+}
