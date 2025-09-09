@@ -1,29 +1,20 @@
-/** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * Handbook content is edited in Admin (saved on server via Apps Script Properties).
- * Mapping (which subtab a staff can see) comes from "Handbook" sheet (small rows).
- * DSR links come from DSR tab: Email | Name | URL
- */
-
 (function () {
   const elApp = document.getElementById("app");
 
-  /* ------------------ Helpers ------------------ */
+  // Minimal storage for session & local preview
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
-  function get(k) {
-    try { const v = localStorage.getItem(k); return v && (v[0] === "{" || v[0] === "[") ? JSON.parse(v) : v; }
-    catch (_) { return null; }
-  }
+  function get(k) { try { const v = localStorage.getItem(k); return v && (v[0] === "{" || v[0] === "[") ? JSON.parse(v) : v; } catch (_) { return null; } }
   function del(k) { localStorage.removeItem(k); }
 
-  // ✅ HARD-CODE your Apps Script Web App URL here (exec URL)
-  const API_BASE = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
+  // 🔗 HARD-CODED API
+  const API_BASE = "https://script.google.com/macros/s/PASTE_YOUR_EXEC_URL_HERE/exec";
 
   // Session until midnight
   function setSession(obj) { const e = new Date(); e.setHours(23,59,59,999); obj.exp=+e; set("rx_session", obj); }
   function getSession(){ const s=get("rx_session"); if(!s) return null; if(Date.now()>(s.exp||0)){ del("rx_session"); return null; } return s; }
   function signOut(){ del("rx_session"); renderSignIn(); }
 
-  // Branding/local previews
+  // Branding + local preview storage
   const DEFAULTS = {
     logoLeft:  "https://files.catbox.moe/8c0x7w.png",
     logoRight: "https://files.catbox.moe/3j1q2a.png",
@@ -186,7 +177,7 @@
       <div class="card">
         <div class="h2">Leave Form</div>
         <div class="space"></div>
-        <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.leaveURL}">↗ Open Leave Form</a>
+        <a class="btn class=btn-blue" target="_blank" rel="noopener" href="${brand.leaveURL}">↗ Open Leave Form</a>
       </div>`;
   }
 
@@ -211,17 +202,15 @@
     });
   }
 
-  /* -------- Employee Handbook (two subtabs) -------- */
+  // Employee Handbook (2 subtabs)
   function renderHandbook(){
     const brand=getBrand();
     const s=getSession();
     const canAdmin=!!(s.tabs&&s.tabs.admin);
 
-    // Provided by backend at login: [{key:'roverx'|'ninjas'|'fallback', company, html}]
     const hb=s.handbooks||[];
     const hbMap={}; hb.forEach(x=>hbMap[x.key]=x.html||"");
 
-    // Entitlements
     const entitled = new Set(hb.map(x => x.key==='fallback' ? null : x.key));
     if (canAdmin) { entitled.add('roverx'); entitled.add('ninjas'); }
 
@@ -310,7 +299,7 @@
     activateSub(firstKey);
   }
 
-  /* -------- Admin (Approvals + Server-backed HTML editors) -------- */
+  // Admin (Approvals + Server-backed HTML)
   function renderAdmin(){
     const el = document.getElementById("panel");
     const s  = getSession();
@@ -330,7 +319,7 @@
 
       <div class="card" id="hbServerCard">
         <div class="h2">Handbook HTML (Server)</div>
-        <div class="kv">Edit the official HTML shown to staff. Mapping (who sees which subtab) comes from <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
+        <div class="kv">Edit the official HTML shown to staff. Mapping (who sees which subtab) comes from <b>Handbook</b> sheet (Email → Company).</div>
         <div class="space"></div>
 
         <div class="h3">Rover X</div>
@@ -352,8 +341,8 @@
       </div>
     `;
 
-    /* ---------- Approvals list ---------- */
     document.getElementById("refreshBtn").onclick = loadPending;
+
     async function loadPending(){
       try{
         document.getElementById("error").textContent="";
@@ -392,7 +381,7 @@
     }
     loadPending();
 
-    /* ---------- Server-backed handbook editors (guarded) ---------- */
+    // Server-backed handbook editors
     const rxTA = document.getElementById("rxHtml");
     const tnTA = document.getElementById("tnHtml");
     const fbTA = document.getElementById("fbHtml");
@@ -433,10 +422,10 @@
 
     loadBtn.onclick = loadServer;
     saveBtn.onclick = saveServer;
-    loadServer(); // auto-load when Admin opens
+    loadServer();
   }
 
-  /* ------------------ Google Identity ------------------ */
+  // Google Identity
   function initGoogleButton(){
     const cid="790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
     function onLoaded(){
@@ -448,7 +437,6 @@
             const res = await apiCall("googleLogin", { id_token: resp.credential });
             if(!res.ok) throw new Error(res.error||"Login failed");
 
-            // Ask backend for handbooks for this user
             let handbooks=[];
             try{
               const h=await apiCall("resolveHandbook", { email: res.email, name: res.name });
@@ -457,8 +445,7 @@
 
             setSession({
               email: res.email, name: res.name, role: res.role, status: res.status,
-              tabs: res.tabs, sheets: res.sheets,
-              handbooks // [{key, company, html}]
+              tabs: res.tabs, sheets: res.sheets, handbooks
             });
 
             if(String(res.status).toLowerCase()!=="approved"){ renderPending(); return; }
