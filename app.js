@@ -1,92 +1,66 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * Handbook now prefers INLINE HTML content:
- *  - Backend resolveHandbook may return {html} or {url}; we render html inside portal.
- *  - Admin has a blank HTML box as fallback. No Google Docs necessary.
+ * Employee Handbook now pulls per-company HTML from Google Sheet tabs:
+ *  - RXhandbook.A1 (Rover X) and TNhandbook.A1 (Tipsy Ninjas)
+ *
+ * Backend `resolveHandbook` returns:
+ *   { ok:true, handbooks:[ { key:'roverx', company:'Rover X Travel', html:'...' }, { key:'ninjas', ... } ] }
+ *
+ * Staff: see the tab(s) they belong to.
+ * Admins (Owner/Manager/HR): see both tabs, plus inline edit override saved locally (optional).
  */
 
 (function () {
   const elApp = document.getElementById("app");
 
-  /* ------------------ Storage helpers ------------------ */
-  function qs(key) {
-    return new URLSearchParams(location.search).get(key) || "";
-  }
-  function set(k, v) {
-    localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v));
-  }
+  /* ------------------ Helpers: storage & query ------------------ */
+  function qs(key) { return new URLSearchParams(location.search).get(key) || ""; }
+  function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
   function get(k) {
     try {
       const v = localStorage.getItem(k);
       return v && (v[0] === "{" || v[0] === "[") ? JSON.parse(v) : v;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
-  function del(k) {
-    localStorage.removeItem(k);
-  }
+  function del(k) { localStorage.removeItem(k); }
 
   /* ------------------ API URL wiring ------------------ */
-  (function wireApi() {
-    const api = qs("api");
-    if (api) set("rx_api_url", api);
-  })();
+  (function wireApi() { const api = qs("api"); if (api) set("rx_api_url", api); })();
   const API = () => get("rx_api_url") || "";
 
   /* ------------------ Session until midnight ------------------ */
   function setSession(obj) {
-    const expiresAt = new Date();
-    expiresAt.setHours(23, 59, 59, 999);
-    obj.exp = +expiresAt;
-    set("rx_session", obj);
+    const expiresAt = new Date(); expiresAt.setHours(23, 59, 59, 999);
+    obj.exp = +expiresAt; set("rx_session", obj);
   }
   function getSession() {
-    const s = get("rx_session");
-    if (!s) return null;
-    if (Date.now() > (s.exp || 0)) {
-      del("rx_session");
-      return null;
-    }
+    const s = get("rx_session"); if (!s) return null;
+    if (Date.now() > (s.exp || 0)) { del("rx_session"); return null; }
     return s;
   }
-  function signOut() {
-    del("rx_session");
-    renderSignIn();
-  }
+  function signOut() { del("rx_session"); renderSignIn(); }
 
-  /* ------------------ Branding / Links (local settings) ------------------ */
+  /* ------------------ Branding / Local admin overrides ------------------ */
   const DEFAULTS = {
-    logoLeft:
-      "https://files.catbox.moe/8c0x7w.png",
-    logoRight:
-      "https://files.catbox.moe/3j1q2a.png",
+    logoLeft:  "https://files.catbox.moe/8c0x7w.png",
+    logoRight: "https://files.catbox.moe/3j1q2a.png",
     logoSize: 120,
-
     checkInURL:
       "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
     leaveURL: "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL:
       "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
 
-    // NEW: Admin fallback HTML if backend does not provide per-user content
-    handbookHTMLFallback: "",   // raw HTML string
-    // Optional last-resort URL (won't be used if HTML exists)
-    handbookURLFallback: "",
+    // Optional local overrides (admins can edit quickly in UI; backend sheets are source of truth)
+    handbookHTML_RoverX_local: "",
+    handbookHTML_Ninjas_local: "",
+    handbookAdminHTML_local: "" // global fallback if user has no mapping
   };
-  function getBrand() {
-    const cur = get("rx_brand");
-    return { ...DEFAULTS, ...(cur || {}) };
-  }
-  function setBrand(patch) {
-    const next = { ...getBrand(), ...(patch || {}) };
-    set("rx_brand", next);
-    return next;
-  }
+  function getBrand() { const cur = get("rx_brand"); return { ...DEFAULTS, ...(cur || {}) }; }
+  function setBrand(patch) { const next = { ...getBrand(), ...(patch || {}) }; set("rx_brand", next); return next; }
 
   /* ------------------ API helper ------------------ */
   async function apiCall(action, body) {
-    const api =
-      "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
+    const api = API() || "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
     const r = await fetch(api, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -95,29 +69,20 @@
     return r.json();
   }
 
-  /* ------------------ Sanitizer (very small whitelist) ------------------ */
+  /* ------------------ Minimal sanitizer ------------------ */
   const ALLOWED_TAGS = new Set([
     "div","p","span","strong","em","b","i","u","br","hr",
-    "h1","h2","h3","h4","h5","h6",
-    "ul","ol","li",
-    "blockquote","pre","code",
-    "table","thead","tbody","tr","th","td",
-    "a"
+    "h1","h2","h3","h4","h5","h6","ul","ol","li","blockquote","pre","code",
+    "table","thead","tbody","tr","th","td","a"
   ]);
-  const ALLOWED_ATTR = {
-    "a": new Set(["href","target","rel"]),
-    "*": new Set([]),
-  };
+  const ALLOWED_ATTR = { "a": new Set(["href","target","rel"]), "*": new Set([]) };
   function sanitizeHTML(html) {
-    const tpl = document.createElement("template");
-    tpl.innerHTML = html || "";
+    const tpl = document.createElement("template"); tpl.innerHTML = html || "";
     const walk = (node) => {
-      // remove scripts/comments
-      if (node.nodeType === 8) { node.remove(); return; }
+      if (node.nodeType === 8) { node.remove(); return; } // comments
       if (node.nodeType === 1) {
         const tag = node.tagName.toLowerCase();
         if (!ALLOWED_TAGS.has(tag)) { node.replaceWith(...Array.from(node.childNodes)); return; }
-        // strip all on* attributes and non-allowed
         [...node.attributes].forEach(attr => {
           const name = attr.name.toLowerCase();
           if (name.startsWith("on")) node.removeAttribute(attr.name);
@@ -126,7 +91,6 @@
             if (!allowed) node.removeAttribute(attr.name);
           }
         });
-        // normalize anchors
         if (tag === "a") {
           const href = node.getAttribute("href") || "#";
           if (!/^https?:/i.test(href)) node.setAttribute("href", "#");
@@ -154,15 +118,12 @@
           <div class="sub" style="text-align:center">Internal Portal</div>
 
           <div id="google_btn_wrap" style="display:flex;justify-content:center;margin:16px 0 8px"></div>
-
           <div class="divider"><span>OR</span></div>
-
           <button id="guestBtn" class="btn">Continue as Guest (CV Application only)</button>
           <div class="footer">If you see a Google popup, please allow the sign-in window.</div>
         </div>
       </div>
     `;
-
     document.getElementById("guestBtn").onclick = () => renderGuestCV();
     initGoogleButton();
   }
@@ -178,10 +139,8 @@
           </div>
           <div class="h2" style="text-align:center">CV Application</div>
           <div class="kv" style="text-align:center;margin-bottom:16px">Guest access only — opens your CV Google Form.</div>
-
           <div class="row" style="flex-direction:column">
-            <a class="btn btn-blue" target="_blank" rel="noopener noreferrer"
-               href="${brand.cvURL}">📄 Open CV Form Application</a>
+            <a class="btn btn-blue" target="_blank" rel="noopener noreferrer" href="${brand.cvURL}">📄 Open CV Form Application</a>
             <button class="btn" id="backSignIn">⬅ Back to Sign-In</button>
             <button class="btn btn-green" id="doneBack">✔ I’ve submitted — Go back</button>
           </div>
@@ -193,10 +152,8 @@
   }
 
   function renderDashboard(preferTab) {
-    const s = getSession();
-    if (!s) return renderSignIn();
-
-    const tabs = s.tabs || { cv: true };
+    const s = getSession(); if (!s) return renderSignIn();
+    const tabs = s.tabs || {};
     const canAdmin = !!tabs.admin;
     const hasDaily = !!tabs.dailySale;
 
@@ -207,9 +164,7 @@
             <div class="h1">Internal Portal</div>
             <div class="kv">Signed in as <b>${s.name || s.email || ""}</b> · <span class="tag">${s.role || "-"}</span></div>
           </div>
-          <div class="row">
-            <button class="btn" id="signOutBtn" style="width:auto">Sign Out</button>
-          </div>
+          <div class="row"><button class="btn" id="signOutBtn" style="width:auto">Sign Out</button></div>
         </div>
 
         <div class="space"></div>
@@ -225,14 +180,11 @@
         <div id="panel"></div>
       </div>
     `;
-
     document.getElementById("signOutBtn").onclick = signOut;
 
     function openPanel(key) {
-      document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
-      const btn = document.querySelector(`.tab[data-tab="${key}"]`);
-      if (btn) btn.classList.add("active");
-
+      document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+      const btn = document.querySelector(`.tab[data-tab="${key}"]`); if (btn) btn.classList.add("active");
       if (key === "checkin") return renderCheckIn();
       if (key === "leave") return renderLeave();
       if (key === "dailysale") return renderDailySale();
@@ -244,14 +196,13 @@
     const isOwner = (s.role || "").toLowerCase() === "owner";
     openPanel(isOwner ? (preferTab || "handbook") : "handbook");
 
-    document.querySelectorAll(".tab").forEach((btn) => {
-      btn.addEventListener("click", (e) => openPanel(e.currentTarget.getAttribute("data-tab")));
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.addEventListener("click", e => openPanel(e.currentTarget.getAttribute("data-tab")));
     });
   }
 
   function renderCheckIn() {
-    const s = getSession();
-    const brand = getBrand();
+    const s = getSession(); const brand = getBrand();
     document.getElementById("panel").innerHTML = `
       <div class="card">
         <div class="h2">Check In</div>
@@ -290,50 +241,131 @@
     list.forEach((it) => {
       const a = document.createElement("a");
       a.className = "item";
-      a.href = it.url;
-      a.target = "_blank";
-      a.rel = "noopener";
+      a.href = it.url; a.target = "_blank"; a.rel = "noopener";
       a.innerHTML = `<div><div><b>${it.name}</b></div><div class="meta">${it.url}</div></div><div>↗</div>`;
       el.appendChild(a);
     });
   }
 
-  /* ------------------ Employee Handbook (inline HTML preferred) ------------------ */
+  /* ------------------ Employee Handbook with two sub-tabs ------------------ */
+
   function renderHandbook() {
     const brand = getBrand();
     const s = getSession();
+    const canAdmin = !!(s.tabs && s.tabs.admin);
 
-    // Priority: backend HTML → admin fallback HTML → backend URL → admin URL → empty
-    const htmlFromBackend = (s && s.handbookHTML) || "";
-    const htmlFromAdmin   = brand.handbookHTMLFallback || "";
-    const urlFromBackend  = (s && s.handbookURL) || "";
-    const urlFromAdmin    = brand.handbookURLFallback || "";
+    // `handbooks` comes from backend resolveHandbook: array of { key:'roverx'|'ninjas', company, html }
+    const hb = s.handbooks || [];
+    // derive which keys user is entitled to
+    const entitled = new Set(hb.map(x => x.key)); // staff: whatever backend included
 
-    const html = (htmlFromBackend || htmlFromAdmin || "").trim();
-    const url  = (!html ? (urlFromBackend || urlFromAdmin || "").trim() : "");
+    // Admins can see both tabs always (even if empty; will show "empty" if no backend HTML)
+    if (canAdmin) { entitled.add('roverx'); entitled.add('ninjas'); }
 
-    let body = "";
-    if (html) {
-      body = `<div class="handbookContent">${sanitizeHTML(html)}</div>`;
-    } else if (url) {
-      body = `
-        <div class="kv" style="margin-bottom:8px">No inline content provided; showing fallback embed.</div>
-        <div class="iframeWrap" style="height:900px">
-          <iframe title="Employee Handbook" src="${url}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen frameborder="0" style="width:100%;height:100%;border:0;"></iframe>
-        </div>`;
-    } else {
-      body = `<div class="kv" style="color:#b91c1c">No handbook content configured yet.</div>`;
-    }
+    const wantsRX = entitled.has('roverx');
+    const wantsTN = entitled.has('ninjas');
+
+    // pick initial tab
+    const initialKey = wantsRX ? 'roverx' : (wantsTN ? 'ninjas' : 'roverx');
 
     document.getElementById("panel").innerHTML = `
       <div class="card">
         <div class="h2">Employee Handbook</div>
-        ${body}
+
+        <div class="tabs" id="subtabs" style="margin-top:8px">
+          ${wantsRX ? `<button class="tab small" data-sub="roverx">ROVER X TRAVEL</button>` : ``}
+          ${wantsTN ? `<button class="tab small" data-sub="ninjas">Tipsy Ninjas</button>` : ``}
+        </div>
+
+        <div id="hbPanel" style="margin-top:10px"></div>
+
+        ${canAdmin ? `
+          <div class="row" id="hbAdminRow" style="margin-top:12px">
+            <button class="btn" id="editThisPage">✏️ Edit this page (local override)</button>
+          </div>
+          <div id="editArea" style="display:none;margin-top:8px">
+            <textarea id="editTextarea" class="textarea" rows="12" placeholder="<h2>Title</h2><p>..."></textarea>
+            <div class="row" style="margin-top:8px">
+              <button class="btn btn-blue" id="saveEdits">Save (local)</button>
+              <button class="btn" id="cancelEdits">Cancel</button>
+            </div>
+            <div class="kv" style="margin-top:6px;color:#555">Note: this saves to your browser (local). To update for everyone, edit A1 in the Google Sheet tabs <b>RXhandbook</b> and <b>TNhandbook</b>.</div>
+          </div>
+        ` : ``}
       </div>
     `;
+
+    const hbMap = {};
+    hb.forEach(x => hbMap[x.key] = x.html || "");
+
+    // local override (admin quick edits)
+    const localRX = (brand.handbookHTML_RoverX_local || "").trim();
+    const localTN = (brand.handbookHTML_Ninjas_local || "").trim();
+    const adminFallbackHTML = (brand.handbookAdminHTML_local || "").trim();
+
+    function resolveHTMLFor(key) {
+      if (key === 'roverx') return (localRX || hbMap['roverx'] || "");
+      if (key === 'ninjas') return (localTN || hbMap['ninjas'] || "");
+      return "";
+    }
+
+    function activateSub(key) {
+      document.querySelectorAll('#subtabs .tab').forEach(b=>b.classList.remove('active'));
+      const btn = document.querySelector(`#subtabs .tab[data-sub="${key}"]`); if (btn) btn.classList.add('active');
+
+      const html = resolveHTMLFor(key);
+      const hbPanel = document.getElementById("hbPanel");
+      if (html) {
+        hbPanel.innerHTML = `<div class="handbookContent">${sanitizeHTML(html)}</div>`;
+      } else if (adminFallbackHTML) {
+        hbPanel.innerHTML = `<div class="handbookContent">${sanitizeHTML(adminFallbackHTML)}</div>`;
+      } else {
+        hbPanel.innerHTML = `<div class="kv" style="color:#b91c1c">No handbook content found. Admins: put HTML in <b>${key==='roverx'?'RXhandbook':'TNhandbook'}</b> A1, or use Edit (local override).</div>`;
+      }
+
+      if (canAdmin) {
+        wireInlineEditor(key, html);
+      }
+    }
+
+    function wireInlineEditor(key, currentHTML) {
+      const editBtn = document.getElementById("editThisPage");
+      const area = document.getElementById("editArea");
+      const ta = document.getElementById("editTextarea");
+      const save = document.getElementById("saveEdits");
+      const cancel = document.getElementById("cancelEdits");
+      if (!editBtn || !area || !ta || !save || !cancel) return;
+
+      editBtn.onclick = () => {
+        area.style.display = "block";
+        ta.value = currentHTML || "";
+        ta.focus();
+      };
+      cancel.onclick = () => { area.style.display = "none"; };
+
+      save.onclick = () => {
+        const content = ta.value || "";
+        const patch = {};
+        if (key === "roverx") patch.handbookHTML_RoverX_local = content;
+        if (key === "ninjas") patch.handbookHTML_Ninjas_local = content;
+        setBrand(patch);
+        area.style.display = "none";
+        const hbPanel = document.getElementById("hbPanel");
+        hbPanel.innerHTML = content ? `<div class="handbookContent">${sanitizeHTML(content)}</div>` : `<div class="kv" style="color:#b91c1c">No handbook content found.</div>`;
+      };
+    }
+
+    // subtab clicks
+    document.querySelectorAll('#subtabs .tab').forEach(btn => {
+      btn.addEventListener('click', e => activateSub(e.currentTarget.getAttribute('data-sub')));
+    });
+
+    // initial
+    const firstKey = (document.querySelector('#subtabs .tab') && document.querySelector('#subtabs .tab').getAttribute('data-sub')) || initialKey;
+    activateSub(firstKey);
   }
 
-  /* ------------------ Admin (includes blank HTML box) ------------------ */
+  /* ------------------ Admin (Approvals + Local overrides info) ------------------ */
   function renderAdmin() {
     const el = document.getElementById("panel");
     const brand = getBrand();
@@ -351,30 +383,35 @@
       <div class="space-lg"></div>
 
       <div class="card">
-        <div class="h2">Handbook — Admin Content (HTML)</div>
-        <div class="kv">Paste your <b>HTML text page</b> here. This is used only if backend does not return per-user HTML.</div>
+        <div class="h2">Handbook — Where to edit</div>
+        <div class="kv">To update the official handbooks for everyone:</div>
+        <ul class="kv">
+          <li>Rover X: edit <b>RXhandbook</b> tab, cell <b>A1</b> in the Portal sheet.</li>
+          <li>Tipsy Ninjas: edit <b>TNhandbook</b> tab, cell <b>A1</b>.</li>
+        </ul>
+        <div class="kv">For a quick visual tweak just for your browser, you can also use the “✏️ Edit this page” button inside the handbook screen (local override).</div>
         <div class="space"></div>
-        <label class="kv">
-          Inline HTML (fallback):
-          <textarea id="handbookHTMLFallback" class="textarea" rows="12" placeholder="<h2>Welcome</h2><p>...</p>">${brand.handbookHTMLFallback || ""}</textarea>
-        </label>
-
-        <div class="space"></div>
-        <div class="kv">Optional last-resort URL (only used if HTML is empty):</div>
-        <label class="kv">
-          Fallback URL:
-          <input id="handbookURLFallback" type="url" class="text" value="${brand.handbookURLFallback || ""}" placeholder="https://... (not required)">
-        </label>
-
-        <div class="space"></div>
-        <div class="row">
-          <button class="btn btn-blue" id="saveBrand">Save</button>
-          <button class="btn" id="previewBrand">Preview on Sign-In</button>
+        <div class="h3">Global Fallback (local)</div>
+        <textarea id="hbAdminHTML" class="textarea" rows="8" placeholder="<h2>Welcome</h2><p>..."></p>"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn btn-blue" id="saveHbAdmin">Save Fallback (local)</button>
+          <button class="btn" id="clearHbAdmin">Clear</button>
         </div>
       </div>
     `;
 
-    // Approvals
+    // Fallback editor wiring
+    const ta = document.getElementById("hbAdminHTML");
+    ta.value = (brand.handbookAdminHTML_local || "");
+    document.getElementById("saveHbAdmin").onclick = () => {
+      setBrand({ handbookAdminHTML_local: (ta.value || "") });
+      alert("Saved locally. This fallback shows only if user has no mapped company or no HTML.");
+    };
+    document.getElementById("clearHbAdmin").onclick = () => {
+      setBrand({ handbookAdminHTML_local: "" });
+      ta.value = "";
+    };
+
     document.getElementById("refreshBtn").onclick = loadPending;
 
     async function loadPending() {
@@ -382,14 +419,11 @@
         document.getElementById("error").textContent = "";
         const res = await apiCall("listPending");
         if (!res.ok) throw new Error(res.error || "Failed to load");
-        const rows = res.pending || [];
         const list = document.getElementById("pendingList");
         list.innerHTML = "";
-        if (rows.length === 0) {
-          list.innerHTML = `<div class="kv">No pending requests.</div>`;
-          return;
-        }
-        rows.forEach((r) => {
+        const rows = res.pending || [];
+        if (!rows.length) { list.innerHTML = `<div class="kv">No pending requests.</div>`; return; }
+        rows.forEach(r => {
           const row = document.createElement("div");
           row.className = "item";
           row.innerHTML = `
@@ -408,18 +442,11 @@
               <button class="btn btn-green" data-act="approve">Approve</button>
             </div>
           `;
-          const sel = row.querySelector(".roleSel");
-          sel.addEventListener("change", async (e) => {
+          row.querySelector(".roleSel").addEventListener("change", async e => {
             await apiCall("setRole", { target: r.email, role: e.target.value });
           });
-          row.querySelector('[data-act="revoke"]').addEventListener("click", async () => {
-            await apiCall("revoke", { target: r.email });
-            await loadPending();
-          });
-          row.querySelector('[data-act="approve"]').addEventListener("click", async () => {
-            await apiCall("approve", { target: r.email });
-            await loadPending();
-          });
+          row.querySelector('[data-act="revoke"]').addEventListener("click", async () => { await apiCall("revoke", { target: r.email }); await loadPending(); });
+          row.querySelector('[data-act="approve"]').addEventListener("click", async () => { await apiCall("approve", { target: r.email }); await loadPending(); });
           list.appendChild(row);
         });
       } catch (err) {
@@ -427,22 +454,11 @@
       }
     }
     loadPending();
-
-    document.getElementById("saveBrand").onclick = () => {
-      setBrand({
-        handbookHTMLFallback: document.getElementById("handbookHTMLFallback").value,
-        handbookURLFallback: document.getElementById("handbookURLFallback").value.trim(),
-      });
-      alert("Saved. Refresh to see everywhere, or Preview.");
-    };
-    document.getElementById("previewBrand").onclick = renderSignIn;
   }
 
   /* ------------------ Google Identity Services button ------------------ */
   function initGoogleButton() {
-    const cid =
-      get("rx_google_client_id") ||
-      "790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
+    const cid = get("rx_google_client_id") || "790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
     function onLoaded() {
       if (!window.google || !window.google.accounts || !window.google.accounts.id) return;
       window.google.accounts.id.initialize({
@@ -452,15 +468,11 @@
             const res = await apiCall("googleLogin", { id_token: resp.credential });
             if (!res.ok) throw new Error(res.error || "Login failed");
 
-            // Ask backend to resolve handbook. It may return {html} or {url}.
-            let handbookURL = "";
-            let handbookHTML = "";
+            // Ask backend for company handbooks (array)
+            let handbooks = [];
             try {
               const h = await apiCall("resolveHandbook", { email: res.email, name: res.name });
-              if (h && h.ok) {
-                handbookURL  = h.url  || "";
-                handbookHTML = h.html || "";
-              }
+              if (h && h.ok && Array.isArray(h.handbooks)) handbooks = h.handbooks;
             } catch (_) {}
 
             setSession({
@@ -470,16 +482,10 @@
               status: res.status,
               tabs: res.tabs,
               sheets: res.sheets,
-              company: res.company,
-              handbookURL,
-              handbookHTML,
+              handbooks, // array of {key, company, html}
             });
 
-            if (String(res.status).toLowerCase() !== "approved") {
-              renderPending();
-              return;
-            }
-
+            if (String(res.status).toLowerCase() !== "approved") { renderPending(); return; }
             const isOwner = (res.role || "").toLowerCase() === "owner";
             renderDashboard(isOwner ? undefined : "handbook");
           } catch (err) {
@@ -492,22 +498,15 @@
       const mount = document.getElementById("google_btn_wrap");
       if (mount) {
         window.google.accounts.id.renderButton(mount, {
-          theme: "filled_black",
-          size: "large",
-          shape: "pill",
-          text: "signin_with",
-          logo_alignment: "left",
-          width: 320,
+          theme: "filled_black", size: "large", shape: "pill", text: "signin_with",
+          logo_alignment: "left", width: 320,
         });
       }
     }
     if (window.google && window.google.accounts && window.google.accounts.id) onLoaded();
     else {
       const t = setInterval(() => {
-        if (window.google && window.google.accounts && window.google.accounts.id) {
-          clearInterval(t);
-          onLoaded();
-        }
+        if (window.google && window.google.accounts && window.google.accounts.id) { clearInterval(t); onLoaded(); }
       }, 100);
     }
   }
