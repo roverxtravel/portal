@@ -1,10 +1,7 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * KEEPING YOUR CURRENT UX. Adds:
- *  - Two landing logos (left/right) with adjustable size
- *  - Admin → Branding & Links (logo URLs, size slider, Check-In URL, Leave URL, CV URL)
- *  - Check-In panel opens Attendance
- *  - Leave panel opens your Google Form
- * All settings are stored in localStorage (no code redeploy needed).
+ * Handbook now prefers INLINE HTML content:
+ *  - Backend resolveHandbook may return {html} or {url}; we render html inside portal.
+ *  - Admin has a blank HTML box as fallback. No Google Docs necessary.
  */
 
 (function () {
@@ -60,15 +57,21 @@
   /* ------------------ Branding / Links (local settings) ------------------ */
   const DEFAULTS = {
     logoLeft:
-      "https://files.catbox.moe/8c0x7w.png", // fallback (Rover X) – replace in Admin
+      "https://files.catbox.moe/8c0x7w.png",
     logoRight:
-      "https://files.catbox.moe/3j1q2a.png", // fallback (Tipsy Ninjas) – replace in Admin
-    logoSize: 120, // px
+      "https://files.catbox.moe/3j1q2a.png",
+    logoSize: 120,
+
     checkInURL:
       "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
     leaveURL: "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL:
       "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
+
+    // NEW: Admin fallback HTML if backend does not provide per-user content
+    handbookHTMLFallback: "",   // raw HTML string
+    // Optional last-resort URL (won't be used if HTML exists)
+    handbookURLFallback: "",
   };
   function getBrand() {
     const cur = get("rx_brand");
@@ -82,19 +85,59 @@
 
   /* ------------------ API helper ------------------ */
   async function apiCall(action, body) {
-    // const api = API();
-    // if (!api)
-    //   throw new Error(
-    //     "API URL not set. Open with ?api=https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec"
-    //   );
-    // add api value directly
-    const api = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
+    const api =
+      "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
     const r = await fetch(api, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, ...body }),
     });
     return r.json();
+  }
+
+  /* ------------------ Sanitizer (very small whitelist) ------------------ */
+  const ALLOWED_TAGS = new Set([
+    "div","p","span","strong","em","b","i","u","br","hr",
+    "h1","h2","h3","h4","h5","h6",
+    "ul","ol","li",
+    "blockquote","pre","code",
+    "table","thead","tbody","tr","th","td",
+    "a"
+  ]);
+  const ALLOWED_ATTR = {
+    "a": new Set(["href","target","rel"]),
+    "*": new Set([]),
+  };
+  function sanitizeHTML(html) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html || "";
+    const walk = (node) => {
+      // remove scripts/comments
+      if (node.nodeType === 8) { node.remove(); return; }
+      if (node.nodeType === 1) {
+        const tag = node.tagName.toLowerCase();
+        if (!ALLOWED_TAGS.has(tag)) { node.replaceWith(...Array.from(node.childNodes)); return; }
+        // strip all on* attributes and non-allowed
+        [...node.attributes].forEach(attr => {
+          const name = attr.name.toLowerCase();
+          if (name.startsWith("on")) node.removeAttribute(attr.name);
+          else {
+            const allowed = (ALLOWED_ATTR[tag] && ALLOWED_ATTR[tag].has(name)) || (ALLOWED_ATTR["*"].has(name));
+            if (!allowed) node.removeAttribute(attr.name);
+          }
+        });
+        // normalize anchors
+        if (tag === "a") {
+          const href = node.getAttribute("href") || "#";
+          if (!/^https?:/i.test(href)) node.setAttribute("href", "#");
+          node.setAttribute("target", "_blank");
+          node.setAttribute("rel", "noopener noreferrer");
+        }
+      }
+      [...node.childNodes].forEach(walk);
+    };
+    [...tpl.content.childNodes].forEach(walk);
+    return tpl.innerHTML;
   }
 
   /* ------------------ Views ------------------ */
@@ -149,7 +192,7 @@
     document.getElementById("doneBack").onclick = renderSignIn;
   }
 
-  function renderDashboard() {
+  function renderDashboard(preferTab) {
     const s = getSession();
     if (!s) return renderSignIn();
 
@@ -171,11 +214,12 @@
 
         <div class="space"></div>
 
-        <div class="tabs">
-          ${tabs.checkIn ? `<button class="tab active" data-tab="checkin">Check In</button>` : ``}
-          ${tabs.leave ? `<button class="tab ${!tabs.checkIn ? "active" : ""}" data-tab="leave">Leave Form</button>` : ``}
-          ${hasDaily ? `<button class="tab ${(!tabs.checkIn && !tabs.leave) ? "active" : ""}" data-tab="dailysale">Daily Sale</button>` : ``}
-          ${canAdmin ? `<button class="tab ${(!tabs.checkIn && !tabs.leave && !hasDaily) ? "active" : ""}" data-tab="admin">Admin</button>` : ``}
+        <div class="tabs" id="tabs">
+          ${tabs.checkIn ? `<button class="tab" data-tab="checkin">Check In</button>` : ``}
+          ${tabs.leave ? `<button class="tab" data-tab="leave">Leave Form</button>` : ``}
+          ${hasDaily ? `<button class="tab" data-tab="dailysale">Daily Sale</button>` : ``}
+          <button class="tab" data-tab="handbook">Employee Handbook</button>
+          ${canAdmin ? `<button class="tab" data-tab="admin">Admin</button>` : ``}
         </div>
 
         <div id="panel"></div>
@@ -184,25 +228,25 @@
 
     document.getElementById("signOutBtn").onclick = signOut;
 
-    const first = document.querySelector(".tab") || null;
-    const open = first ? first.getAttribute("data-tab") : null;
-    open && openPanel(open);
-
-    document.querySelectorAll(".tab").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
-        e.currentTarget.classList.add("active");
-        openPanel(e.currentTarget.getAttribute("data-tab"));
-      });
-    });
-
     function openPanel(key) {
+      document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
+      const btn = document.querySelector(`.tab[data-tab="${key}"]`);
+      if (btn) btn.classList.add("active");
+
       if (key === "checkin") return renderCheckIn();
       if (key === "leave") return renderLeave();
       if (key === "dailysale") return renderDailySale();
+      if (key === "handbook") return renderHandbook();
       if (key === "admin") return renderAdmin();
       document.getElementById("panel").innerHTML = "";
     }
+
+    const isOwner = (s.role || "").toLowerCase() === "owner";
+    openPanel(isOwner ? (preferTab || "handbook") : "handbook");
+
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", (e) => openPanel(e.currentTarget.getAttribute("data-tab")));
+    });
   }
 
   function renderCheckIn() {
@@ -213,8 +257,8 @@
         <div class="h2">Check In</div>
         <div class="kv">Signed in as <b>${s.name || s.email}</b></div>
         <div class="space"></div>
-        <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.checkInURL}">↗ Open Attendance </a>
-        <div class="kv" style="margin-top:6px">This opens your existing Google Sheet in a new tab.</div>
+        <a class="btn btn-blue" target="_blank" rel="noopener" href="${brand.checkInURL}">↗ Open Attendance</a>
+        <div class="kv" style="margin-top:6px">Opens your Google Sheet in a new tab.</div>
       </div>
     `;
   }
@@ -254,7 +298,42 @@
     });
   }
 
-  /* ------------------ Admin (Approvals + Branding & Links) ------------------ */
+  /* ------------------ Employee Handbook (inline HTML preferred) ------------------ */
+  function renderHandbook() {
+    const brand = getBrand();
+    const s = getSession();
+
+    // Priority: backend HTML → admin fallback HTML → backend URL → admin URL → empty
+    const htmlFromBackend = (s && s.handbookHTML) || "";
+    const htmlFromAdmin   = brand.handbookHTMLFallback || "";
+    const urlFromBackend  = (s && s.handbookURL) || "";
+    const urlFromAdmin    = brand.handbookURLFallback || "";
+
+    const html = (htmlFromBackend || htmlFromAdmin || "").trim();
+    const url  = (!html ? (urlFromBackend || urlFromAdmin || "").trim() : "");
+
+    let body = "";
+    if (html) {
+      body = `<div class="handbookContent">${sanitizeHTML(html)}</div>`;
+    } else if (url) {
+      body = `
+        <div class="kv" style="margin-bottom:8px">No inline content provided; showing fallback embed.</div>
+        <div class="iframeWrap" style="height:900px">
+          <iframe title="Employee Handbook" src="${url}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen frameborder="0" style="width:100%;height:100%;border:0;"></iframe>
+        </div>`;
+    } else {
+      body = `<div class="kv" style="color:#b91c1c">No handbook content configured yet.</div>`;
+    }
+
+    document.getElementById("panel").innerHTML = `
+      <div class="card">
+        <div class="h2">Employee Handbook</div>
+        ${body}
+      </div>
+    `;
+  }
+
+  /* ------------------ Admin (includes blank HTML box) ------------------ */
   function renderAdmin() {
     const el = document.getElementById("panel");
     const brand = getBrand();
@@ -272,17 +351,21 @@
       <div class="space-lg"></div>
 
       <div class="card">
-        <div class="h2">Branding & Links</div>
+        <div class="h2">Handbook — Admin Content (HTML)</div>
+        <div class="kv">Paste your <b>HTML text page</b> here. This is used only if backend does not return per-user HTML.</div>
         <div class="space"></div>
-        <div class="list">
-          <label class="kv">Logo Left URL <input id="logoLeft" type="url" class="text" value="${brand.logoLeft}" placeholder="https://..."></label>
-          <label class="kv">Logo Right URL <input id="logoRight" type="url" class="text" value="${brand.logoRight}" placeholder="https://..."></label>
-          <label class="kv">Logo Size <input id="logoSize" type="range" min="60" max="220" step="2" value="${brand.logoSize}" /> <span id="logoSizeVal">${brand.logoSize}px</span></label>
+        <label class="kv">
+          Inline HTML (fallback):
+          <textarea id="handbookHTMLFallback" class="textarea" rows="12" placeholder="<h2>Welcome</h2><p>...</p>">${brand.handbookHTMLFallback || ""}</textarea>
+        </label>
 
-          <label class="kv">Check-In URL <input id="checkInURL" type="url" class="text" value="${brand.checkInURL}" placeholder="https://..."></label>
-          <label class="kv">Leave Form URL <input id="leaveURL" type="url" class="text" value="${brand.leaveURL}" placeholder="https://..."></label>
-          <label class="kv">CV Form URL <input id="cvURL" type="url" class="text" value="${brand.cvURL}" placeholder="https://..."></label>
-        </div>
+        <div class="space"></div>
+        <div class="kv">Optional last-resort URL (only used if HTML is empty):</div>
+        <label class="kv">
+          Fallback URL:
+          <input id="handbookURLFallback" type="url" class="text" value="${brand.handbookURLFallback || ""}" placeholder="https://... (not required)">
+        </label>
+
         <div class="space"></div>
         <div class="row">
           <button class="btn btn-blue" id="saveBrand">Save</button>
@@ -329,18 +412,14 @@
           sel.addEventListener("change", async (e) => {
             await apiCall("setRole", { target: r.email, role: e.target.value });
           });
-          row
-            .querySelector('[data-act="revoke"]')
-            .addEventListener("click", async () => {
-              await apiCall("revoke", { target: r.email });
-              await loadPending();
-            });
-          row
-            .querySelector('[data-act="approve"]')
-            .addEventListener("click", async () => {
-              await apiCall("approve", { target: r.email });
-              await loadPending();
-            });
+          row.querySelector('[data-act="revoke"]').addEventListener("click", async () => {
+            await apiCall("revoke", { target: r.email });
+            await loadPending();
+          });
+          row.querySelector('[data-act="approve"]').addEventListener("click", async () => {
+            await apiCall("approve", { target: r.email });
+            await loadPending();
+          });
           list.appendChild(row);
         });
       } catch (err) {
@@ -349,19 +428,10 @@
     }
     loadPending();
 
-    // Branding form
-    const sizeInput = document.getElementById("logoSize");
-    const sizeVal = document.getElementById("logoSizeVal");
-    sizeInput.addEventListener("input", () => (sizeVal.textContent = sizeInput.value + "px"));
-
     document.getElementById("saveBrand").onclick = () => {
       setBrand({
-        logoLeft: document.getElementById("logoLeft").value.trim(),
-        logoRight: document.getElementById("logoRight").value.trim(),
-        logoSize: parseInt(document.getElementById("logoSize").value, 10) || 120,
-        checkInURL: document.getElementById("checkInURL").value.trim(),
-        leaveURL: document.getElementById("leaveURL").value.trim(),
-        cvURL: document.getElementById("cvURL").value.trim(),
+        handbookHTMLFallback: document.getElementById("handbookHTMLFallback").value,
+        handbookURLFallback: document.getElementById("handbookURLFallback").value.trim(),
       });
       alert("Saved. Refresh to see everywhere, or Preview.");
     };
@@ -370,7 +440,7 @@
 
   /* ------------------ Google Identity Services button ------------------ */
   function initGoogleButton() {
-    const cid = 
+    const cid =
       get("rx_google_client_id") ||
       "790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
     function onLoaded() {
@@ -381,6 +451,18 @@
           try {
             const res = await apiCall("googleLogin", { id_token: resp.credential });
             if (!res.ok) throw new Error(res.error || "Login failed");
+
+            // Ask backend to resolve handbook. It may return {html} or {url}.
+            let handbookURL = "";
+            let handbookHTML = "";
+            try {
+              const h = await apiCall("resolveHandbook", { email: res.email, name: res.name });
+              if (h && h.ok) {
+                handbookURL  = h.url  || "";
+                handbookHTML = h.html || "";
+              }
+            } catch (_) {}
+
             setSession({
               email: res.email,
               name: res.name,
@@ -388,9 +470,18 @@
               status: res.status,
               tabs: res.tabs,
               sheets: res.sheets,
+              company: res.company,
+              handbookURL,
+              handbookHTML,
             });
-            if (String(res.status).toLowerCase() === "approved") renderDashboard();
-            else renderPending();
+
+            if (String(res.status).toLowerCase() !== "approved") {
+              renderPending();
+              return;
+            }
+
+            const isOwner = (res.role || "").toLowerCase() === "owner";
+            renderDashboard(isOwner ? undefined : "handbook");
           } catch (err) {
             alert("Google sign-in failed: " + err);
           }
@@ -445,9 +536,9 @@
   /* ------------------ Boot ------------------ */
   const sess = getSession();
   if (sess && String(sess.status || "").toLowerCase() === "approved") {
-    renderDashboard();
+    const isOwner = (sess.role || "").toLowerCase() === "owner";
+    renderDashboard(isOwner ? undefined : "handbook");
   } else {
     renderSignIn();
   }
 })();
-
