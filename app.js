@@ -1,19 +1,13 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
  * Handbook content is edited in Admin (saved on server via Apps Script Properties).
  * Mapping (which subtab a staff can see) comes from "Handbook" sheet (small rows).
- * Backend actions expected:
- *   - googleLogin
- *   - resolveHandbook(email) -> { ok, handbooks:[{key, company, html}] }
- *   - getHandbookAdmin(email) -> { ok, rx, tn, fallback }
- *   - setHandbookAdmin(email, rx, tn, fallback) -> { ok }
- *   - listPending / approve / revoke / setRole
+ * DSR links come from DSR tab: Email | Name | URL
  */
 
 (function () {
   const elApp = document.getElementById("app");
 
   /* ------------------ Helpers ------------------ */
-  function qs(key) { return new URLSearchParams(location.search).get(key) || ""; }
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
   function get(k) {
     try { const v = localStorage.getItem(k); return v && (v[0] === "{" || v[0] === "[") ? JSON.parse(v) : v; }
@@ -21,9 +15,8 @@
   }
   function del(k) { localStorage.removeItem(k); }
 
-  // API URL
-  (function wireApi() { const api = qs("api"); if (api) set("rx_api_url", api); })();
-  const API = () => get("rx_api_url") || "";
+  // ✅ HARD-CODE your Apps Script Web App URL here (exec URL)
+  const API_BASE = "https://script.google.com/macros/s/PASTE_YOUR_EXEC_URL_HERE/exec";
 
   // Session until midnight
   function setSession(obj) { const e = new Date(); e.setHours(23,59,59,999); obj.exp=+e; set("rx_session", obj); }
@@ -46,8 +39,11 @@
 
   // API helper
   async function apiCall(action, body){
-    const api = API() || "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
-    const r = await fetch(api, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...body }) });
+    const r = await fetch(API_BASE, {
+      method:"POST",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, ...body })
+    });
     return r.json();
   }
 
@@ -201,7 +197,7 @@
     document.getElementById("panel").innerHTML=`
       <div class="card">
         <div class="h2">Daily Sale</div>
-        ${!has?`<div class="kv">No linked sheets for your account.</div>`:""}
+        ${!has?`<div class="kv">No linked files for your account.</div>`:""}
         <div class="space"></div>
         <div class="list" id="dsList"></div>
       </div>`;
@@ -442,7 +438,7 @@
 
   /* ------------------ Google Identity ------------------ */
   function initGoogleButton(){
-    const cid=get("rx_google_client_id")||"790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
+    const cid="790326467841-o52rg342gvi39t7g7ldirhc5inahf802.apps.googleusercontent.com";
     function onLoaded(){
       if(!window.google||!window.google.accounts||!window.google.accounts.id) return;
       window.google.accounts.id.initialize({
