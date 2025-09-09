@@ -10,7 +10,8 @@
   const elApp = document.getElementById("app");
 
   /* ------------------ API base (HARD-CODED) ------------------ */
-  const API_EXEC = "https://script.google.com/macros/s/PASTE_YOUR_EXEC_URL_HERE/exec";
+  const API_EXEC = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
+
 
   /* ------------------ Storage helpers ------------------ */
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
