@@ -20,7 +20,13 @@
 
   /* ------------------ API helper ------------------ */
   async function apiCall(action, body) {
-    // Keep your friend’s working exec URL here:
+    // const api = API();
+    // if (!api)
+    //   throw new Error(
+    //     "API URL not set. Open with ?api=https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec"
+    //   );
+    // add api value directly
+    // test deploy
     const api = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
     const r = await fetch(api, {
       method: "POST",
