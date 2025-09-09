@@ -1,16 +1,12 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * Employee Handbook is stored on the server (Apps Script Properties),
- * editable in Admin tab:
- *   - Save Rover X HTML
- *   - Save Tipsy Ninjas HTML
- *   - Map Gmail → companies (Rover X / Ninjas)
- *
- * Backend:
- *   - googleLogin (unchanged)
- *   - resolveHandbook(email) -> { handbooks:[{key:'roverx'|'ninjas', company, html}] }
- *   - getHandbookConfig() -> { rxHtml, tnHtml, map }
- *   - saveHandbookHtml(email, rxHtml, tnHtml)  // admin-only
- *   - saveHandbookMap(email, map)              // admin-only
+ * Handbook content is edited in Admin (saved on server via Apps Script Properties).
+ * Mapping (which subtab a staff can see) still comes from "Handbook" sheet (small rows).
+ * Backend actions expected:
+ *   - googleLogin
+ *   - resolveHandbook(email) -> { ok, handbooks:[{key, company, html}] }
+ *   - getHandbookAdmin() -> { ok, rx, tn, fallback }
+ *   - setHandbookAdmin(email, rx, tn, fallback) -> { ok }
+ *   - listPending / approve / revoke / setRole (unchanged)
  */
 
 (function () {
@@ -34,7 +30,7 @@
   function getSession(){ const s=get("rx_session"); if(!s) return null; if(Date.now()>(s.exp||0)){ del("rx_session"); return null; } return s; }
   function signOut(){ del("rx_session"); renderSignIn(); }
 
-  /* ------------------ Branding (only for small local tweaks) ------------------ */
+  /* ------------------ Branding (local-only tweaks) ------------------ */
   const DEFAULTS = {
     logoLeft:  "https://files.catbox.moe/8c0x7w.png",
     logoRight: "https://files.catbox.moe/3j1q2a.png",
@@ -42,6 +38,10 @@
     checkInURL: "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
     leaveURL: "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL: "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
+
+    // optional local previews for Handbook (does NOT affect server content)
+    handbookHTML_RoverX_local: "",
+    handbookHTML_Ninjas_local: "",
   };
   function getBrand(){ const cur=get("rx_brand"); return { ...DEFAULTS, ...(cur||{}) }; }
   function setBrand(patch){ const next={ ...getBrand(), ...(patch||{}) }; set("rx_brand", next); return next; }
@@ -217,17 +217,24 @@
     });
   }
 
-  /* ------------------ Employee Handbook (server-stored) ------------------ */
+  /* ------------------ Employee Handbook (two subtabs) ------------------ */
   function renderHandbook(){
+    const brand=getBrand();
     const s=getSession();
     const canAdmin=!!(s.tabs&&s.tabs.admin);
 
-    const hb=s.handbooks||[]; // from resolveHandbook at login
-    const entitled=new Set(hb.map(x=>x.key));
-    if(canAdmin){ entitled.add('roverx'); entitled.add('ninjas'); }
+    // Provided by backend at login: [{key:'roverx'|'ninjas'|'fallback', company, html}]
+    const hb=s.handbooks||[];
+    const hbMap={}; hb.forEach(x=>hbMap[x.key]=x.html||"");
 
-    const wantsRX=entitled.has('roverx');
-    const wantsTN=entitled.has('ninjas');
+    // Entitlements: staff -> what backend includes; admins -> both
+    const entitled = new Set(hb.map(x=> x.key==='fallback' ? null : x.key));
+    if (canAdmin) { entitled.add('roverx'); entitled.add('ninjas'); }
+
+    const wantsRX = entitled.has('roverx');
+    const wantsTN = entitled.has('ninjas');
+
+    const initialKey = wantsRX ? 'roverx' : (wantsTN ? 'ninjas' : (hbMap['fallback'] ? 'fallback' : 'roverx'));
 
     document.getElementById("panel").innerHTML=`
       <div class="card">
@@ -236,153 +243,86 @@
         <div class="tabs" id="subtabs" style="margin-top:8px">
           ${wantsRX?`<button class="tab small" data-sub="roverx">ROVER X TRAVEL</button>`:``}
           ${wantsTN?`<button class="tab small" data-sub="ninjas">Tipsy Ninjas</button>`:``}
+          ${(!wantsRX && !wantsTN && hbMap['fallback']) ? `<button class="tab small" data-sub="fallback">General</button>` : ``}
         </div>
 
         <div id="hbPanel" style="margin-top:10px"></div>
 
         ${canAdmin?`
-          <div class="space-lg"></div>
-          <div class="card">
-            <div class="h3">Admin — Edit Handbook HTML (server-wide)</div>
-            <div class="kv">Your edits are saved on the server and shown to everyone mapped to that company.</div>
-            <div class="space"></div>
-            <div class="h4">Rover X HTML</div>
-            <textarea id="rxHtml" class="textarea" rows="10" placeholder="<h2>Title</h2><p>..."></p>"></textarea>
-            <div class="space"></div>
-            <div class="h4">Tipsy Ninjas HTML</div>
-            <textarea id="tnHtml" class="textarea" rows="10" placeholder="<h2>Title</h2><p>..."></p>"></textarea>
+          <div class="row" id="hbAdminRow" style="margin-top:12px">
+            <button class="btn" id="editThisPage">✏️ Edit this page (local preview)</button>
+          </div>
+          <div id="editArea" style="display:none;margin-top:8px">
+            <textarea id="editTextarea" class="textarea" rows="12" placeholder="<h2>Title</h2><p>..."></p>"></textarea>
             <div class="row" style="margin-top:8px">
-              <button class="btn btn-blue" id="saveHBHtml">Save HTML (server)</button>
-              <button class="btn" id="reloadHB">Reload</button>
+              <button class="btn btn-blue" id="saveEdits">Save (local preview)</button>
+              <button class="btn" id="cancelEdits">Cancel</button>
             </div>
-
-            <div class="space-lg"></div>
-            <div class="h3">Admin — Assign Staff Access</div>
-            <div class="kv">Map Gmail → companies. A user can have one or both.</div>
-            <div id="mapArea"></div>
-            <div class="row" style="margin-top:8px">
-              <button class="btn btn-blue" id="saveMap">Save Mapping (server)</button>
-              <button class="btn" id="addRow">Add Row</button>
-            </div>
+            <div class="kv" style="margin-top:6px;color:#555">Admins: official handbook HTML is saved in Admin → “Handbook HTML (Server)”. This editor is only a local preview (in your browser).</div>
           </div>
         `:``}
       </div>`;
 
-    const hbPanel=document.getElementById("hbPanel");
-    const hbMap={}; hb.forEach(x=>hbMap[x.key]=x.html||"");
+    const localRX=(brand.handbookHTML_RoverX_local||"").trim();
+    const localTN=(brand.handbookHTML_Ninjas_local||"").trim();
+    const fb = hbMap['fallback'] || "";
 
-    function show(key){
+    function resolveHTMLFor(key){
+      if (key==='roverx') return (localRX || hbMap['roverx'] || fb || "");
+      if (key==='ninjas') return (localTN || hbMap['ninjas'] || fb || "");
+      if (key==='fallback') return fb || "";
+      return "";
+    }
+
+    function activateSub(key){
       document.querySelectorAll('#subtabs .tab').forEach(b=>b.classList.remove('active'));
       const btn=document.querySelector(`#subtabs .tab[data-sub="${key}"]`); if(btn) btn.classList.add('active');
-      const html=hbMap[key]||"";
-      hbPanel.innerHTML = html ? `<div class="handbookContent">${sanitizeHTML(html)}</div>`
-        : `<div class="kv" style="color:#b91c1c">No handbook content found for ${key==='roverx'?'Rover X':'Tipsy Ninjas'}.</div>`;
+
+      const html=resolveHTMLFor(key);
+      const hbPanel=document.getElementById("hbPanel");
+      if (html) hbPanel.innerHTML=`<div class="handbookContent">${sanitizeHTML(html)}</div>`;
+      else hbPanel.innerHTML=`<div class="kv" style="color:#b91c1c">No handbook content available.</div>`;
+
+      if (canAdmin) wireInlineEditor(key, html);
     }
 
-    // clicks
-    document.querySelectorAll('#subtabs .tab').forEach(btn=>{
-      btn.addEventListener('click', e=> show(e.currentTarget.getAttribute('data-sub')));
-    });
-    const first=document.querySelector('#subtabs .tab');
-    if(first) show(first.getAttribute('data-sub'));
-    else hbPanel.innerHTML=`<div class="kv">You don't have a handbook assigned yet.</div>`;
+    function wireInlineEditor(key, currentHTML){
+      const editBtn=document.getElementById("editThisPage");
+      const area=document.getElementById("editArea");
+      const ta=document.getElementById("editTextarea");
+      const save=document.getElementById("saveEdits");
+      const cancel=document.getElementById("cancelEdits");
+      if(!editBtn||!area||!ta||!save||!cancel) return;
 
-    if(!canAdmin) return;
-
-    // --- Admin editor + mapping UI ---
-    (async function loadConfig(){
-      try{
-        const cfg=await apiCall('getHandbookConfig',{});
-        if(!cfg.ok) throw new Error(cfg.error||'Failed to load config');
-        // fill HTML
-        document.getElementById('rxHtml').value=cfg.rxHtml||'';
-        document.getElementById('tnHtml').value=cfg.tnHtml||'';
-        // build map table
-        buildMapTable(cfg.map||{});
-      }catch(err){
-        alert('Failed to load handbook config: '+err);
-      }
-    })();
-
-    document.getElementById('saveHBHtml').onclick=async ()=>{
-      try{
-        const rx=document.getElementById('rxHtml').value||'';
-        const tn=document.getElementById('tnHtml').value||'';
-        const me=getSession();
-        const res=await apiCall('saveHandbookHtml',{ email: me.email, rxHtml: rx, tnHtml: tn });
-        if(!res.ok) throw new Error(res.error||'Save failed');
-        alert('Saved.');
-      }catch(err){ alert('Save failed: '+err); }
-    };
-    document.getElementById('reloadHB').onclick=async ()=>{
-      try{
-        const h=await apiCall('resolveHandbook',{ email:getSession().email, name:getSession().name });
-        if(h && h.ok && Array.isArray(h.handbooks)){
-          const tmp={}; h.handbooks.forEach(x=>tmp[x.key]=x.html||'');
-          // refresh current panel if same tab exists
-          const active=document.querySelector('#subtabs .tab.active');
-          if(active){ const key=active.getAttribute('data-sub'); hbMap[key]=tmp[key]||hbMap[key]; show(key); }
-        }
-      }catch(_){}
-    };
-
-    function buildMapTable(map){
-      const el=document.getElementById('mapArea');
-      el.innerHTML=`
-        <div class="table">
-          <div class="tr th">
-            <div class="td">Email (Gmail)</div>
-            <div class="td">Rover X</div>
-            <div class="td">Tipsy Ninjas</div>
-            <div class="td"></div>
-          </div>
-          <div id="rows"></div>
-        </div>`;
-      const rowsEl=document.getElementById('rows');
-
-      function addRow(email='', rx=false, tn=false){
-        const row=document.createElement('div'); row.className='tr';
-        row.innerHTML=`
-          <div class="td"><input class="inp email" type="email" placeholder="user@gmail.com" value="${email}"></div>
-          <div class="td" style="text-align:center"><input type="checkbox" class="chk rx" ${rx?'checked':''}></div>
-          <div class="td" style="text-align:center"><input type="checkbox" class="chk tn" ${tn?'checked':''}></div>
-          <div class="td"><button class="btn danger rm">Remove</button></div>`;
-        row.querySelector('.rm').onclick=()=>row.remove();
-        rowsEl.appendChild(row);
-      }
-
-      // existing
-      Object.keys(map||{}).forEach(em=>{
-        const arr=Array.isArray(map[em])? map[em]:[];
-        addRow(em, arr.includes('roverx'), arr.includes('ninjas'));
-      });
-
-      document.getElementById('addRow').onclick=()=>addRow();
-      document.getElementById('saveMap').onclick=async ()=>{
-        // collect
-        const out={};
-        rowsEl.querySelectorAll('.tr').forEach(r=>{
-          const em=(r.querySelector('.email').value||'').trim().toLowerCase();
-          if(!em) return;
-          const rx=r.querySelector('.rx').checked;
-          const tn=r.querySelector('.tn').checked;
-          const arr=[]; if(rx) arr.push('roverx'); if(tn) arr.push('ninjas');
-          out[em]=arr;
-        });
-        try{
-          const me=getSession();
-          const res=await apiCall('saveHandbookMap',{ email: me.email, map: out });
-          if(!res.ok) throw new Error(res.error||'Save failed');
-          alert('Mapping saved.');
-        }catch(err){ alert('Save failed: '+err); }
+      editBtn.onclick=()=>{ area.style.display="block"; ta.value=currentHTML||""; ta.focus(); };
+      cancel.onclick =()=>{ area.style.display="none"; };
+      save.onclick   =()=>{
+        const content=ta.value||"";
+        const patch={};
+        if (key==="roverx") patch.handbookHTML_RoverX_local=content;
+        if (key==="ninjas") patch.handbookHTML_Ninjas_local=content;
+        setBrand(patch);
+        area.style.display="none";
+        document.getElementById("hbPanel").innerHTML = content
+          ? `<div class="handbookContent">${sanitizeHTML(content)}</div>`
+          : `<div class="kv" style="color:#b91c1c">No handbook content found.</div>`;
       };
     }
+
+    document.querySelectorAll('#subtabs .tab').forEach(btn=>{
+      btn.addEventListener('click', e=> activateSub(e.currentTarget.getAttribute('data-sub')));
+    });
+    const firstBtn=document.querySelector('#subtabs .tab');
+    const firstKey = (firstBtn && firstBtn.getAttribute('data-sub')) || initialKey;
+    activateSub(firstKey);
   }
 
-  /* ------------------ Admin (Approvals + Tips) ------------------ */
+  /* ------------------ Admin (Approvals + Server-backed Handbook HTML) ------------------ */
   function renderAdmin(){
-    const el=document.getElementById("panel");
-    el.innerHTML=`
+    const el = document.getElementById("panel");
+    const s  = getSession();
+
+    el.innerHTML = `
       <div class="card">
         <div class="row" style="justify-content:space-between">
           <div class="h2">Admin — Approvals</div>
@@ -395,16 +335,32 @@
 
       <div class="space-lg"></div>
 
-      <div class="card">
-        <div class="h2">Handbook — How it works</div>
-        <ul class="kv">
-          <li>Edit the <b>Employee Handbook</b> HTML for Rover X and Tipsy Ninjas inside the Handbook tab (Admin section).</li>
-          <li>Assign staff access by mapping their Gmail to one or both companies (also in the Handbook tab, Admin section).</li>
-        </ul>
-      </div>`;
+      <div class="card" id="hbServerCard">
+        <div class="h2">Handbook HTML (Server)</div>
+        <div class="kv">Edit the official HTML shown to staff. Mapping (which staff sees which subtab) still comes from the <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
+        <div class="space"></div>
 
+        <div class="h3">Rover X</div>
+        <textarea id="rxHtml" class="textarea" rows="10" placeholder="<h2>Rover X Handbook</h2>..."></textarea>
+
+        <div class="space"></div>
+        <div class="h3">Tipsy Ninjas</div>
+        <textarea id="tnHtml" class="textarea" rows="10" placeholder="<h2>Tipsy Ninjas Handbook</h2>..."></textarea>
+
+        <div class="space"></div>
+        <div class="h3">Fallback (optional)</div>
+        <textarea id="fbHtml" class="textarea" rows="6" placeholder="<p>General handbook…</p>"></textarea>
+
+        <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-blue" id="loadServer">Load from Server</button>
+          <button class="btn btn-green" id="saveServer">Save to Server</button>
+        </div>
+        <div id="saveStatus" class="kv" style="margin-top:6px"></div>
+      </div>
+    `;
+
+    /* ---------- Approvals list ---------- */
     document.getElementById("refreshBtn").onclick = loadPending;
-
     async function loadPending(){
       try{
         document.getElementById("error").textContent="";
@@ -442,6 +398,50 @@
       }
     }
     loadPending();
+
+    /* ---------- Server-backed handbook editors (guarded wiring) ---------- */
+    const rxTA = document.getElementById("rxHtml");
+    const tnTA = document.getElementById("tnHtml");
+    const fbTA = document.getElementById("fbHtml");
+    const saveStatus = document.getElementById("saveStatus");
+    const loadBtn = document.getElementById("loadServer");
+    const saveBtn = document.getElementById("saveServer");
+
+    // If any editor element is missing, bail out to avoid "null.value" errors
+    if (!rxTA || !tnTA || !fbTA || !saveStatus || !loadBtn || !saveBtn) return;
+
+    async function loadServer(){
+      try{
+        saveStatus.textContent = "Loading…";
+        const res = await apiCall("getHandbookAdmin", { email: s.email });
+        if (!res.ok) throw new Error(res.error || "Cannot load");
+        rxTA.value = res.rx || "";
+        tnTA.value = res.tn || "";
+        fbTA.value = res.fallback || "";
+        saveStatus.textContent = "Loaded.";
+      }catch(err){
+        saveStatus.textContent = "Error: " + err.message;
+      }
+    }
+    async function saveServer(){
+      try{
+        saveStatus.textContent = "Saving…";
+        const res = await apiCall("setHandbookAdmin", {
+          email: s.email,
+          rx: rxTA.value || "",
+          tn: tnTA.value || "",
+          fallback: fbTA.value || ""
+        });
+        if (!res.ok) throw new Error(res.error || "Cannot save");
+        saveStatus.textContent = "Saved to server.";
+      }catch(err){
+        saveStatus.textContent = "Error: " + err.message;
+      }
+    }
+
+    loadBtn.onclick = loadServer;
+    saveBtn.onclick = saveServer;
+    loadServer(); // auto-load when Admin opens
   }
 
   /* ------------------ Google Identity ------------------ */
@@ -456,7 +456,7 @@
             const res = await apiCall("googleLogin", { id_token: resp.credential });
             if(!res.ok) throw new Error(res.error||"Login failed");
 
-            // Request handbooks from server mapping
+            // Request handbooks for this user
             let handbooks=[];
             try{
               const h=await apiCall("resolveHandbook", { email: res.email, name: res.name });
