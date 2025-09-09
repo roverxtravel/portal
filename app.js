@@ -16,7 +16,7 @@
   function del(k) { localStorage.removeItem(k); }
 
   // ✅ HARD-CODE your Apps Script Web App URL here (exec URL)
-  const API_BASE = "https://script.google.com/macros/s/PASTE_YOUR_EXEC_URL_HERE/exec";
+  const API_BASE = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
 
   // Session until midnight
   function setSession(obj) { const e = new Date(); e.setHours(23,59,59,999); obj.exp=+e; set("rx_session", obj); }
