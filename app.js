@@ -1,18 +1,18 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
  * Handbook content is edited in Admin (saved on server via Apps Script Properties).
- * Mapping (which subtab a staff can see) still comes from "Handbook" sheet (small rows).
+ * Mapping (which subtab a staff can see) comes from "Handbook" sheet (small rows).
  * Backend actions expected:
  *   - googleLogin
  *   - resolveHandbook(email) -> { ok, handbooks:[{key, company, html}] }
- *   - getHandbookAdmin() -> { ok, rx, tn, fallback }
+ *   - getHandbookAdmin(email) -> { ok, rx, tn, fallback }
  *   - setHandbookAdmin(email, rx, tn, fallback) -> { ok }
- *   - listPending / approve / revoke / setRole (unchanged)
+ *   - listPending / approve / revoke / setRole
  */
 
 (function () {
   const elApp = document.getElementById("app");
 
-  /* ------------------ Helpers: storage & query ------------------ */
+  /* ------------------ Helpers ------------------ */
   function qs(key) { return new URLSearchParams(location.search).get(key) || ""; }
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
   function get(k) {
@@ -21,16 +21,16 @@
   }
   function del(k) { localStorage.removeItem(k); }
 
-  /* ------------------ API URL wiring ------------------ */
+  // API URL
   (function wireApi() { const api = qs("api"); if (api) set("rx_api_url", api); })();
   const API = () => get("rx_api_url") || "";
 
-  /* ------------------ Session until midnight ------------------ */
+  // Session until midnight
   function setSession(obj) { const e = new Date(); e.setHours(23,59,59,999); obj.exp=+e; set("rx_session", obj); }
   function getSession(){ const s=get("rx_session"); if(!s) return null; if(Date.now()>(s.exp||0)){ del("rx_session"); return null; } return s; }
   function signOut(){ del("rx_session"); renderSignIn(); }
 
-  /* ------------------ Branding (local-only tweaks) ------------------ */
+  // Branding/local previews
   const DEFAULTS = {
     logoLeft:  "https://files.catbox.moe/8c0x7w.png",
     logoRight: "https://files.catbox.moe/3j1q2a.png",
@@ -38,22 +38,20 @@
     checkInURL: "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
     leaveURL: "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL: "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
-
-    // optional local previews for Handbook (does NOT affect server content)
     handbookHTML_RoverX_local: "",
     handbookHTML_Ninjas_local: "",
   };
   function getBrand(){ const cur=get("rx_brand"); return { ...DEFAULTS, ...(cur||{}) }; }
   function setBrand(patch){ const next={ ...getBrand(), ...(patch||{}) }; set("rx_brand", next); return next; }
 
-  /* ------------------ API helper ------------------ */
+  // API helper
   async function apiCall(action, body){
     const api = API() || "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
     const r = await fetch(api, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...body }) });
     return r.json();
   }
 
-  /* ------------------ Minimal sanitizer ------------------ */
+  // Sanitizer
   const ALLOWED_TAGS = new Set(["div","p","span","strong","em","b","i","u","br","hr","h1","h2","h3","h4","h5","h6","ul","ol","li","blockquote","pre","code","table","thead","tbody","tr","th","td","a"]);
   const ALLOWED_ATTR = { "a": new Set(["href","target","rel"]), "*": new Set([]) };
   function sanitizeHTML(html){
@@ -217,7 +215,7 @@
     });
   }
 
-  /* ------------------ Employee Handbook (two subtabs) ------------------ */
+  /* -------- Employee Handbook (two subtabs) -------- */
   function renderHandbook(){
     const brand=getBrand();
     const s=getSession();
@@ -227,13 +225,12 @@
     const hb=s.handbooks||[];
     const hbMap={}; hb.forEach(x=>hbMap[x.key]=x.html||"");
 
-    // Entitlements: staff -> what backend includes; admins -> both
-    const entitled = new Set(hb.map(x=> x.key==='fallback' ? null : x.key));
+    // Entitlements
+    const entitled = new Set(hb.map(x => x.key==='fallback' ? null : x.key));
     if (canAdmin) { entitled.add('roverx'); entitled.add('ninjas'); }
 
     const wantsRX = entitled.has('roverx');
     const wantsTN = entitled.has('ninjas');
-
     const initialKey = wantsRX ? 'roverx' : (wantsTN ? 'ninjas' : (hbMap['fallback'] ? 'fallback' : 'roverx'));
 
     document.getElementById("panel").innerHTML=`
@@ -258,7 +255,7 @@
               <button class="btn btn-blue" id="saveEdits">Save (local preview)</button>
               <button class="btn" id="cancelEdits">Cancel</button>
             </div>
-            <div class="kv" style="margin-top:6px;color:#555">Admins: official handbook HTML is saved in Admin → “Handbook HTML (Server)”. This editor is only a local preview (in your browser).</div>
+            <div class="kv" style="margin-top:6px;color:#555">Admins: official handbook HTML is saved in Admin → “Handbook HTML (Server)”. This editor is local only (your browser).</div>
           </div>
         `:``}
       </div>`;
@@ -317,7 +314,7 @@
     activateSub(firstKey);
   }
 
-  /* ------------------ Admin (Approvals + Server-backed Handbook HTML) ------------------ */
+  /* -------- Admin (Approvals + Server-backed HTML editors) -------- */
   function renderAdmin(){
     const el = document.getElementById("panel");
     const s  = getSession();
@@ -337,7 +334,7 @@
 
       <div class="card" id="hbServerCard">
         <div class="h2">Handbook HTML (Server)</div>
-        <div class="kv">Edit the official HTML shown to staff. Mapping (which staff sees which subtab) still comes from the <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
+        <div class="kv">Edit the official HTML shown to staff. Mapping (who sees which subtab) comes from <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
         <div class="space"></div>
 
         <div class="h3">Rover X</div>
@@ -399,7 +396,7 @@
     }
     loadPending();
 
-    /* ---------- Server-backed handbook editors (guarded wiring) ---------- */
+    /* ---------- Server-backed handbook editors (guarded) ---------- */
     const rxTA = document.getElementById("rxHtml");
     const tnTA = document.getElementById("tnHtml");
     const fbTA = document.getElementById("fbHtml");
@@ -407,7 +404,6 @@
     const loadBtn = document.getElementById("loadServer");
     const saveBtn = document.getElementById("saveServer");
 
-    // If any editor element is missing, bail out to avoid "null.value" errors
     if (!rxTA || !tnTA || !fbTA || !saveStatus || !loadBtn || !saveBtn) return;
 
     async function loadServer(){
@@ -456,7 +452,7 @@
             const res = await apiCall("googleLogin", { id_token: resp.credential });
             if(!res.ok) throw new Error(res.error||"Login failed");
 
-            // Request handbooks for this user
+            // Ask backend for handbooks for this user
             let handbooks=[];
             try{
               const h=await apiCall("resolveHandbook", { email: res.email, name: res.name });
@@ -511,7 +507,7 @@
     document.getElementById("guestEnter").onclick=renderGuestCV;
   }
 
-  /* ------------------ boot ------------------ */
+  // Boot
   const sess=getSession();
   if(sess && String(sess.status||"").toLowerCase()==="approved"){
     const isOwner=(sess.role||"").toLowerCase()==="owner";
