@@ -1,14 +1,16 @@
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * KEEPING your current UX and Google Sign-In code.
- * Adds:
- *  - Employee Handbook tab with 2 subtabs (Rover X, Tipsy Ninjas)
- *  - Admin → "Handbook HTML (Server)" editor (saves to Apps Script Properties)
- * Mapping (who sees which subtab) comes from "Handbook" sheet: Name | Email | Company | URL | Notes | Updated
- * DSR links still come from "DSR" sheet: Email | Name | URL
+ * Google Sign-In kept simple (text/plain requests).
+ * Employee Handbook with 2 subtabs (Rover X / Tipsy Ninjas).
+ * Admin → “Handbook HTML (Server)” saves HTML to Apps Script Properties.
+ * Mapping of who sees which subtab comes from the “Handbook” sheet (Email → Company).
+ * DSR links come from the “DSR” sheet.
  */
 
 (function () {
   const elApp = document.getElementById("app");
+
+  /* ------------------ API base (HARD-CODED) ------------------ */
+  const API_EXEC = "https://script.google.com/macros/s/PASTE_YOUR_EXEC_URL_HERE/exec";
 
   /* ------------------ Storage helpers ------------------ */
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
@@ -18,21 +20,18 @@
   }
   function del(k) { localStorage.removeItem(k); }
 
-  /* ------------------ API helper ------------------ */
+  /* ------------------ API helper (text/plain avoids preflight) ------------------ */
   async function apiCall(action, body) {
-    // const api = API();
-    // if (!api)
-    //   throw new Error(
-    //     "API URL not set. Open with ?api=https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec"
-    //   );
-    // add api value directly
-    // test deploy
-    const api = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
-    const r = await fetch(api, {
+    const r = await fetch(API_EXEC, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, ...body }),
     });
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      const t = await r.text().catch(()=>"(no text)");
+      throw new Error("API returned non-JSON: " + t.slice(0, 200));
+    }
     return r.json();
   }
 
@@ -57,14 +56,13 @@
     checkInURL: "https://docs.google.com/spreadsheets/d/19DbytZMQborRmbqvDbb9gAJqdu_ClmuLTdVTklDxEfA/edit?usp=sharing",
     leaveURL:   "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL:      "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
-    // Local-only preview overrides for handbook (does NOT change server content)
     handbookHTML_RoverX_local: "",
     handbookHTML_Ninjas_local: "",
   };
   function getBrand() { const cur = get("rx_brand"); return { ...DEFAULTS, ...(cur || {}) }; }
   function setBrand(patch) { const next = { ...getBrand(), ...(patch || {}) }; set("rx_brand", next); return next; }
 
-  /* ------------------ Sanitizer for handbook HTML ------------------ */
+  /* ------------------ Minimal sanitizer for handbook HTML ------------------ */
   const ALLOWED_TAGS = new Set([
     "div","p","span","strong","em","b","i","u","br","hr",
     "h1","h2","h3","h4","h5","h6","ul","ol","li","blockquote","pre","code",
@@ -259,7 +257,7 @@
     const s = getSession();
     const canAdmin = !!(s.tabs && s.tabs.admin);
 
-    // Handbooks were fetched at login and stored in session as [{key:'roverx'|'ninjas'|'fallback', company, html}]
+    // [{ key:'roverx'|'ninjas'|'fallback', company, html }]
     const hb = s.handbooks || [];
     const hbMap = {}; hb.forEach(x => hbMap[x.key] = x.html || "");
 
