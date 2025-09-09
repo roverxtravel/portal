@@ -457,3 +457,16 @@
     renderSignIn();
   }
 })();
+    document.getElementById("backLogin").onclick = renderSignIn;
+    document.getElementById("guestEnter").onclick = renderGuestCV;
+  }
+
+  /* ------------------ Boot ------------------ */
+  const sess = getSession();
+  if (sess && String(sess.status || "").toLowerCase() === "approved") {
+    const isOwner = (sess.role || "").toLowerCase() === "owner";
+    renderDashboard(isOwner ? undefined : "handbook");
+  } else {
+    renderSignIn();
+  }
+})();
