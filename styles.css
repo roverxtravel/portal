@@ -176,3 +176,19 @@ a.btn:focus-visible,
   opacity:.6;
   cursor:not-allowed;
   filter:grayscale(10%);
+.handbookContent {
+  line-height: 1.6;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.handbookContent h1,
+.handbookContent h2,
+.handbookContent h3 {
+  margin: 0.4em 0 0.3em;
+}
+
+.handbookContent p { margin: 0.6em 0; }
+.handbookContent ul, .handbookContent ol { margin: 0.6em 0 0.6em 1.2em; }
+.handbookContent table { width: 100%; border-collapse: collapse; margin: 0.6em 0; }
+.handbookContent th, .handbookContent td { border: 1px solid var(--border); padding: 8px; }
