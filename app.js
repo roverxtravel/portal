@@ -54,7 +54,7 @@
     logoLeft:  "https://files.catbox.moe/8c0x7w.png",
     logoRight: "https://files.catbox.moe/3j1q2a.png",
     logoSize: 120,
-    checkInURL: "https://script.google.com/macros/s/AKfycbyxsYKhEGsE4WfK74rkPttiFEPYMEp9PFm88HdxXUSMhc1jhnnqLzk2-KvtbzPw-RsN/exec",
+    checkInURL: "https://script.google.com/macros/s/AKfycbyGX_la8mxZO19Kns5B6V3eLb568fiOpPF2_CfpM_rgiwo9k2dFgPBXm71zVHSCGLTcew/exec",
     leaveURL:   "https://forms.gle/idkWEa9db5QwUAE3A",
     cvURL:      "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
     handbookHTML_RoverX_local: "",
