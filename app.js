@@ -11,7 +11,8 @@
 
   /* ------------------ API base (HARD-CODED) ------------------ */
   const API_EXEC = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
-
+  const ATTENDANCE_EXEC = "https://script.google.com/macros/s/AKfycbzc25tvKs-HZxH88HArzcOsY9E_dvscq5cQ9jcFm_srr39FpgWuUSuu4zKKM7yGpmlj/exec";
+  
   /* ------------------ Storage helpers ------------------ */
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
   function get(k) {
@@ -35,14 +36,24 @@
     return r.json();
   }
 
-  /* ------------------ NEW: Leave approvals API helpers ------------------ */
-  async function leaveListPending() {
-    return apiCall("leave_listPending", {});
-  }
-  async function leaveDecide(row, decision) {
-    // decision: 'approved' | 'rejected'
-    return apiCall("leave_decide", { row, decision });
-  }
+/* ------------------ NEW: Leave approvals API helpers ------------------ */
+async function leaveListPending() {
+  const r = await fetch(ATTENDANCE_EXEC, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "leave_listPending" }),
+  });
+  return r.json();
+}
+async function leaveDecide(row, decision) {
+  const r = await fetch(ATTENDANCE_EXEC, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "leave_decide", row, decision }),
+  });
+  return r.json();
+}
+
 
   /* ------------------ Session until midnight ------------------ */
   function setSession(obj) {
