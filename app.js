@@ -1,16 +1,20 @@
+<script>
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
- * Now with HR tab → Leave Approvals (calls Attendance web app)
- * Admin tab is for technical/branding/handbook only.
+ * Google Sign-In kept simple (text/plain requests).
+ * Employee Handbook with 2 subtabs (Rover X / Tipsy Ninjas).
+ * HR tab visible to all; “Leave Approvals” sub-tab only for HR/Manager/Owner.
+ * Admin → “Handbook HTML (Server)” saves HTML to Apps Script Properties.
+ * Mapping of who sees which subtab comes from the “Handbook” sheet (Email → Company).
+ * DSR links come from the “DSR” sheet.
  */
 
 (function () {
   const elApp = document.getElementById("app");
 
   /* ------------------ API bases (HARD-CODED) ------------------ */
-  // 1) Portal Access web app (googleLogin, listPending, setRole, resolveHandbook, etc.)
+  // Portal Access (Allowlist, Handbook admin, DSR, Google Sign-in)
   const API_EXEC = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
-
-  // 2) Attendance web app (leave_listPending, leave_decide)  ⬅️ put your Attendance "Deploy as web app" EXEC URL here
+  // Attendance script (Leave Approvals lives here: leave_listPending / leave_decide)
   const ATTENDANCE_EXEC = "https://script.google.com/macros/s/AKfycbzc25tvKs-HZxH88HArzcOsY9E_dvscq5cQ9jcFm_srr39FpgWuUSuu4zKKM7yGpmlj/exec";
 
   /* ------------------ Storage helpers ------------------ */
@@ -36,7 +40,7 @@
     return r.json();
   }
 
-  /* ------------------ NEW: Leave approvals API helpers (Attendance) ------------------ */
+  /* ------------------ Leave approvals API helpers (Attendance) ------------------ */
   async function leaveListPending() {
     const r = await fetch(ATTENDANCE_EXEC, {
       method: "POST",
@@ -183,7 +187,7 @@
 
     const tabs = s.tabs || { cv: true };
     const canAdmin = !!tabs.admin;
-    const canHR = /^(HR|Manager|Owner)$/i.test(String(s.role || ''));
+    const hasDaily = !!tabs.dailySale;
 
     elApp.innerHTML = `
       <div class="container">
@@ -200,10 +204,10 @@
         <div class="tabs">
           ${tabs.checkIn ? `<button class="tab" data-tab="checkin">Check In</button>` : ``}
           ${tabs.leave    ? `<button class="tab" data-tab="leave">Leave Form</button>` : ``}
-          ${tabs.dailySale? `<button class="tab" data-tab="dailysale">Daily Sale</button>` : ``}
+          ${hasDaily      ? `<button class="tab" data-tab="dailysale">Daily Sale</button>` : ``}
           <button class="tab" data-tab="handbook">Employee Handbook</button>
           <button class="tab" data-tab="hr">HR</button>
-          ${canAdmin     ? `<button class="tab" data-tab="admin">Admin</button>` : ``}
+          ${canAdmin      ? `<button class="tab" data-tab="admin">Admin</button>` : ``}
         </div>
 
         <div id="panel"></div>
@@ -289,10 +293,10 @@
     const canAdmin = !!(s.tabs && s.tabs.admin);
 
     // [{ key:'roverx'|'ninjas'|'fallback', company, html }]
-    const hb = Array.isArray(s.handbooks) ? s.handbooks : [];
+    const hb = s.handbooks || [];
     const hbMap = {}; hb.forEach(x => hbMap[x.key] = x.html || "");
 
-    // Entitlements; Admins can view both tabs regardless
+    // Entitlements from backend; Admins can view both tabs regardless
     const entitled = new Set(hb.filter(x => x.key !== 'fallback').map(x => x.key));
     if (canAdmin) { entitled.add('roverx'); entitled.add('ninjas'); }
 
@@ -374,6 +378,7 @@
       };
     }
 
+    // Wire subtabs and open initial
     document.querySelectorAll('#subtabs .tab').forEach(btn => {
       btn.addEventListener('click', e => activateSub(e.currentTarget.getAttribute('data-sub')));
     });
@@ -382,57 +387,139 @@
     activateSub(firstKey);
   }
 
-function renderHR() {
-  const s = getSession();
-  const canApprove = /^(HR|Manager|Owner)$/i.test(String(s.role || ''));
+  /* ------------------ HR (visible to all) ------------------ */
+  function renderHR() {
+    const s = getSession();
+    const canApprove = /^(HR|Manager|Owner)$/i.test(String(s.role || ''));
 
-  // Build subtabs: show Leave Approvals button only for allowed roles
-  const subtabs = [
-    canApprove ? `<button class="tab small" data-sub="leave">Leave Approvals</button>` : ``,
-    // later: add more HR tools (policies, HR docs, etc.)
-  ].join("");
+    const subtabs = [
+      canApprove ? `<button class="tab small" data-sub="leave">Leave Approvals</button>` : ``,
+      // place more HR tools here in the future (these will show to everyone)
+    ].join("");
 
-  document.getElementById("panel").innerHTML = `
-    <div class="card">
-      <div class="h2">HR</div>
-      <div class="tabs" id="hrSubtabs" style="margin-top:8px">
-        ${subtabs || `<div class="kv">No HR tools available for your role.</div>`}
+    document.getElementById("panel").innerHTML = `
+      <div class="card">
+        <div class="h2">HR</div>
+        <div class="tabs" id="hrSubtabs" style="margin-top:8px">
+          ${subtabs || ``}
+        </div>
+        <div id="hrPanel" style="margin-top:10px"></div>
+        ${!canApprove && !subtabs ? `<div class="kv">No HR tools available for your role.</div>` : ``}
       </div>
-      <div id="hrPanel" style="margin-top:10px"></div>
-    </div>
-  `;
+    `;
 
-  if (canApprove) {
-    // Default to Leave Approvals for permitted roles
-    activateHRSub("leave");
-    document.querySelectorAll("#hrSubtabs .tab").forEach(btn => {
-      btn.addEventListener("click", e => {
-        document.querySelectorAll("#hrSubtabs .tab").forEach(b => b.classList.remove("active"));
-        e.currentTarget.classList.add("active");
-        activateHRSub(e.currentTarget.getAttribute("data-sub"));
+    if (canApprove) {
+      activateHRSub("leave");
+      document.querySelectorAll("#hrSubtabs .tab").forEach(btn => {
+        btn.addEventListener("click", e => {
+          document.querySelectorAll("#hrSubtabs .tab").forEach(b => b.classList.remove("active"));
+          e.currentTarget.classList.add("active");
+          activateHRSub(e.currentTarget.getAttribute("data-sub"));
+        });
       });
-    });
-  } else {
-    // Staff (not HR/Manager/Owner): simple message
-    document.getElementById("hrPanel").innerHTML =
-      `<div class="kv">If you need leave approvals, please contact HR or your manager.</div>`;
+    } else {
+      // Staff (not HR/Manager/Owner): info only
+      document.getElementById("hrPanel").innerHTML =
+        `<div class="kv">If you need leave approvals, please contact HR or your manager.</div>`;
+    }
   }
-}
+  function activateHRSub(key) {
+    if (key === "leave") return renderLeaveApprovalsHR();
+    document.getElementById("hrPanel").innerHTML = "";
+  }
+  function renderLeaveApprovalsHR() {
+    const wrap = document.getElementById("hrPanel");
+    wrap.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="h3">Leave Approvals</div>
+        <div class="row" style="gap:8px">
+          <button class="btn" id="lvHelp">Columns?</button>
+          <button class="btn btn-blue" id="lvRefresh">Refresh</button>
+        </div>
+      </div>
+      <div id="lvError" class="kv" style="color:#b91c1c"></div>
+      <div class="space"></div>
+      <div class="list" id="lvList"><div class="kv">Loading…</div></div>
+    `;
 
-function activateHRSub(key) {
-  if (key === "leave") return renderLeaveApprovalsHR();
-  document.getElementById("hrPanel").innerHTML = "";
-}
+    const lvList  = document.getElementById("lvList");
+    const lvError = document.getElementById("lvError");
 
+    document.getElementById("lvHelp").onclick = () => {
+      alert(
+`Leave sheet expectations:
+- Status (blank or "pending" shows here; "approved"/"rejected" is hidden)
+- Email, Name, Department (optional), Leave Type (optional), Half Day (optional)
+- Start Date, End Date
+- Submitted At (optional)
+Approving/Rejecting writes back to the Leave sheet.`
+      );
+    };
+    document.getElementById("lvRefresh").onclick = loadLeavePending;
+    loadLeavePending();
 
-  /* ------------------ Admin (Account Approvals + Branding + Handbook server editor) ------------------ */
+    async function loadLeavePending() {
+      try {
+        lvError.textContent = "";
+        lvList.innerHTML = `<div class="kv">Loading…</div>`;
+        const res = await leaveListPending();
+        if (!res.ok) throw new Error(res.error || "Failed to load");
+        const items = res.items || [];
+        if (items.length === 0) {
+          lvList.innerHTML = `<div class="kv">No pending leave requests.</div>`;
+          return;
+        }
+        lvList.innerHTML = "";
+        items.forEach((it) => {
+          const div = document.createElement("div");
+          div.className = "item";
+          div.innerHTML = `
+            <div>
+              <div><b>${it.name || "(no name)"} — ${it.email || ""}</b></div>
+              <div class="meta">
+                ${it.dept ? (it.dept + " • ") : ""}${it.type || ""}${it.half ? (" • " + it.half) : ""}
+              </div>
+              <div class="meta">
+                ${it.start ? ("From: " + (new Date(it.start)).toLocaleDateString()) : ""}
+                ${it.end ? (" → To: " + (new Date(it.end)).toLocaleDateString()) : ""}
+                ${it.when ? (" • Submitted: " + (new Date(it.when)).toLocaleString()) : ""}
+              </div>
+            </div>
+            <div class="row" style="gap:6px">
+              <button class="btn" data-act="reject">Reject</button>
+              <button class="btn btn-green" data-act="approve">Approve</button>
+            </div>
+          `;
+          const btnA = div.querySelector('[data-act="approve"]');
+          const btnR = div.querySelector('[data-act="reject"]');
+
+          btnA.onclick = async () => {
+            btnA.disabled = true; btnR.disabled = true;
+            await leaveDecide(it.row, "approved").catch(err => alert("Error: " + err.message));
+            await loadLeavePending();
+          };
+          btnR.onclick = async () => {
+            btnA.disabled = true; btnR.disabled = true;
+            await leaveDecide(it.row, "rejected").catch(err => alert("Error: " + err.message));
+            await loadLeavePending();
+          };
+
+          lvList.appendChild(div);
+        });
+      } catch (err) {
+        lvError.textContent = String(err);
+        lvList.innerHTML = "";
+      }
+    }
+  }
+
+  /* ------------------ Admin (Approvals + Branding + Handbook server editor) ------------------ */
   function renderAdmin() {
     const el = document.getElementById("panel");
     const brand = getBrand();
     const s = getSession();
 
     el.innerHTML = `
-      <!-- ACCOUNT APPROVALS -->
       <div class="card">
         <div class="row" style="justify-content:space-between">
           <div class="h2">Admin — Approvals</div>
@@ -445,7 +532,6 @@ function activateHRSub(key) {
 
       <div class="space-lg"></div>
 
-      <!-- BRANDING & LINKS -->
       <div class="card">
         <div class="h2">Branding & Links</div>
         <div class="space"></div>
@@ -466,7 +552,6 @@ function activateHRSub(key) {
 
       <div class="space-lg"></div>
 
-      <!-- HANDBOOK (SERVER) -->
       <div class="card" id="hbServerCard">
         <div class="h2">Handbook HTML (Server)</div>
         <div class="kv">Edit the official HTML shown to staff. Mapping (who sees which subtab) comes from <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
@@ -569,7 +654,6 @@ function activateHRSub(key) {
     async function loadServer(){
       try{
         saveStatus.textContent = "Loading…";
-        const s = getSession();
         const res = await apiCall("getHandbookAdmin", { email: s.email });
         if (!res.ok) throw new Error(res.error || "Cannot load");
         rxTA.value = res.rx || "";
@@ -583,7 +667,6 @@ function activateHRSub(key) {
     async function saveServer(){
       try{
         saveStatus.textContent = "Saving…";
-        const s = getSession();
         const res = await apiCall("setHandbookAdmin", {
           email: s.email,
           rx: rxTA.value || "",
@@ -688,3 +771,4 @@ function activateHRSub(key) {
     renderSignIn();
   }
 })();
+</script>
