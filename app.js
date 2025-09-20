@@ -38,34 +38,14 @@
     }
     return r.json();
   }
+// Leave approvals via Portal proxy (same origin as other API calls)
+async function leaveListPending() {
+  return apiCall('lv_list', {});
+}
+async function leaveDecide(row, decision) {
+  return apiCall('lv_decide', { row, decision });
+}
 
-  /* ------------------ Leave approvals API helpers (Attendance) ------------------ */
-  async function leaveListPending() {
-    const r = await fetch(ATTENDANCE_EXEC, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "leave_listPending" }),
-    });
-    const ct = r.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) {
-      const t = await r.text().catch(()=>"(no text)");
-      throw new Error("Attendance API returned non-JSON: " + t.slice(0, 200));
-    }
-    return r.json();
-  }
-  async function leaveDecide(row, decision) {
-    const r = await fetch(ATTENDANCE_EXEC, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "leave_decide", row, decision }),
-    });
-    const ct = r.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) {
-      const t = await r.text().catch(()=>"(no text)");
-      throw new Error("Attendance API returned non-JSON: " + t.slice(0, 200));
-    }
-    return r.json();
-  }
 
   /* ------------------ Session until midnight ------------------ */
   function setSession(obj) {
