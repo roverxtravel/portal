@@ -202,7 +202,7 @@
           ${tabs.leave    ? `<button class="tab" data-tab="leave">Leave Form</button>` : ``}
           ${tabs.dailySale? `<button class="tab" data-tab="dailysale">Daily Sale</button>` : ``}
           <button class="tab" data-tab="handbook">Employee Handbook</button>
-          ${canHR        ? `<button class="tab" data-tab="hr">HR</button>` : ``}
+          <button class="tab" data-tab="hr">HR</button>
           ${canAdmin     ? `<button class="tab" data-tab="admin">Admin</button>` : ``}
         </div>
 
@@ -382,22 +382,29 @@
     activateSub(firstKey);
   }
 
-  /* ------------------ HR (subtabs; first = Leave Approvals) ------------------ */
-  function renderHR() {
-    document.getElementById("panel").innerHTML = `
-      <div class="card">
-        <div class="h2">HR</div>
-        <div class="tabs" id="hrSubtabs" style="margin-top:8px">
-          <button class="tab small" data-sub="leave">Leave Approvals</button>
-          <!-- future: <button class="tab small" data-sub="audit">Attendance Audit</button> -->
-        </div>
-        <div id="hrPanel" style="margin-top:10px"></div>
+function renderHR() {
+  const s = getSession();
+  const canApprove = /^(HR|Manager|Owner)$/i.test(String(s.role || ''));
+
+  // Build subtabs: show Leave Approvals button only for allowed roles
+  const subtabs = [
+    canApprove ? `<button class="tab small" data-sub="leave">Leave Approvals</button>` : ``,
+    // later: add more HR tools (policies, HR docs, etc.)
+  ].join("");
+
+  document.getElementById("panel").innerHTML = `
+    <div class="card">
+      <div class="h2">HR</div>
+      <div class="tabs" id="hrSubtabs" style="margin-top:8px">
+        ${subtabs || `<div class="kv">No HR tools available for your role.</div>`}
       </div>
-    `;
+      <div id="hrPanel" style="margin-top:10px"></div>
+    </div>
+  `;
 
-    // default subtab
+  if (canApprove) {
+    // Default to Leave Approvals for permitted roles
     activateHRSub("leave");
-
     document.querySelectorAll("#hrSubtabs .tab").forEach(btn => {
       btn.addEventListener("click", e => {
         document.querySelectorAll("#hrSubtabs .tab").forEach(b => b.classList.remove("active"));
@@ -405,96 +412,18 @@
         activateHRSub(e.currentTarget.getAttribute("data-sub"));
       });
     });
+  } else {
+    // Staff (not HR/Manager/Owner): simple message
+    document.getElementById("hrPanel").innerHTML =
+      `<div class="kv">If you need leave approvals, please contact HR or your manager.</div>`;
   }
+}
 
-  function activateHRSub(key) {
-    if (key === "leave") return renderLeaveApprovalsHR();
-    document.getElementById("hrPanel").innerHTML = "";
-  }
+function activateHRSub(key) {
+  if (key === "leave") return renderLeaveApprovalsHR();
+  document.getElementById("hrPanel").innerHTML = "";
+}
 
-  function renderLeaveApprovalsHR() {
-    const wrap = document.getElementById("hrPanel");
-    wrap.innerHTML = `
-      <div class="row" style="justify-content:space-between">
-        <div class="h3">Leave Approvals</div>
-        <div class="row" style="gap:8px">
-          <button class="btn" id="lvHelp">Columns?</button>
-          <button class="btn btn-blue" id="lvRefresh">Refresh</button>
-        </div>
-      </div>
-      <div id="lvError" class="kv" style="color:#b91c1c"></div>
-      <div class="space"></div>
-      <div class="list" id="lvList"><div class="kv">Loading…</div></div>
-    `;
-
-    const lvList   = document.getElementById("lvList");
-    const lvError  = document.getElementById("lvError");
-
-    document.getElementById("lvHelp").onclick = () => {
-      alert(
-`Leave sheet expectations:
-- Status (blank or "pending" shows here; "approved"/"rejected" is hidden)
-- Email, Name, Department (optional), Leave Type (optional), Half Day (optional)
-- Start Date, End Date
-- Submitted At (optional)
-Approving/Rejecting writes back to the Leave sheet from Attendance project.`
-      );
-    };
-    document.getElementById("lvRefresh").onclick = loadLeavePending;
-    loadLeavePending();
-
-    async function loadLeavePending() {
-      try {
-        lvError.textContent = "";
-        lvList.innerHTML = `<div class="kv">Loading…</div>`;
-        const res = await leaveListPending();
-        if (!res.ok) throw new Error(res.error || "Failed to load");
-        const items = res.items || [];
-        if (items.length === 0) {
-          lvList.innerHTML = `<div class="kv">No pending leave requests.</div>`;
-          return;
-        }
-        lvList.innerHTML = "";
-        items.forEach((it) => {
-          const div = document.createElement("div");
-          div.className = "item";
-          div.innerHTML = `
-            <div>
-              <div><b>${it.name || "(no name)"} — ${it.email || ""}</b></div>
-              <div class="meta">
-                ${it.dept ? (it.dept + " • ") : ""}${it.type || ""}${it.half ? (" • " + it.half) : ""}
-              </div>
-              <div class="meta">
-                ${it.start ? ("From: " + (new Date(it.start)).toLocaleDateString()) : ""}
-                ${it.end ? (" → To: " + (new Date(it.end)).toLocaleDateString()) : ""}
-                ${it.when ? (" • Submitted: " + (new Date(it.when)).toLocaleString()) : ""}
-              </div>
-            </div>
-            <div class="row" style="gap:6px">
-              <button class="btn" data-act="reject">Reject</button>
-              <button class="btn btn-green" data-act="approve">Approve</button>
-            </div>
-          `;
-          div.querySelector('[data-act="approve"]').onclick = async () => {
-            div.querySelector('[data-act="approve"]').disabled = true;
-            div.querySelector('[data-act="reject"]').disabled = true;
-            await leaveDecide(it.row, "approved").catch(err => alert("Error: " + err.message));
-            await loadLeavePending();
-          };
-          div.querySelector('[data-act="reject"]').onclick = async () => {
-            div.querySelector('[data-act="approve"]').disabled = true;
-            div.querySelector('[data-act="reject"]').disabled = true;
-            await leaveDecide(it.row, "rejected").catch(err => alert("Error: " + err.message));
-            await loadLeavePending();
-          };
-          lvList.appendChild(div);
-        });
-      } catch (err) {
-        lvError.textContent = String(err);
-        lvList.innerHTML = "";
-      }
-    }
-  }
 
   /* ------------------ Admin (Account Approvals + Branding + Handbook server editor) ------------------ */
   function renderAdmin() {
