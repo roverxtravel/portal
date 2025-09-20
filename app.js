@@ -1,4 +1,3 @@
-<script>
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
  * Google Sign-In kept simple (text/plain requests).
  * Employee Handbook with 2 subtabs (Rover X / Tipsy Ninjas).
@@ -771,4 +770,3 @@ Approving/Rejecting writes back to the Leave sheet.`
     renderSignIn();
   }
 })();
-</script>
