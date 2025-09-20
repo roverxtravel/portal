@@ -1,4 +1,3 @@
-<script>
 /** Rover X & Tipsy Ninjas — Internal Portal (no-build static app)
  * Now with HR tab → Leave Approvals (calls Attendance web app)
  * Admin tab is for technical/branding/handbook only.
@@ -760,4 +759,3 @@ Approving/Rejecting writes back to the Leave sheet from Attendance project.`
     renderSignIn();
   }
 })();
-</script>
