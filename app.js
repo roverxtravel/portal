@@ -12,7 +12,6 @@
   /* ------------------ API base (HARD-CODED) ------------------ */
   const API_EXEC = "https://script.google.com/macros/s/AKfycbxarN-MSvr86BA83tPs5iMMO8btTPLjxrllZb_knMTdONXCD36w6veRm92EACgztzaxrQ/exec";
 
-
   /* ------------------ Storage helpers ------------------ */
   function set(k, v) { localStorage.setItem(k, typeof v === "string" ? v : JSON.stringify(v)); }
   function get(k) {
@@ -34,6 +33,15 @@
       throw new Error("API returned non-JSON: " + t.slice(0, 200));
     }
     return r.json();
+  }
+
+  /* ------------------ NEW: Leave approvals API helpers ------------------ */
+  async function leaveListPending() {
+    return apiCall("leave_listPending", {});
+  }
+  async function leaveDecide(row, decision) {
+    // decision: 'approved' | 'rejected'
+    return apiCall("leave_decide", { row, decision });
   }
 
   /* ------------------ Session until midnight ------------------ */
@@ -260,6 +268,10 @@
 
     // [{ key:'roverx'|'ninjas'|'fallback', company, html }]
     const hb = s.handbooks || [];
+    a: {
+      // Ensure it's an array even if backend sends null
+      if (!Array.isArray(hb)) break a;
+    }
     const hbMap = {}; hb.forEach(x => hbMap[x.key] = x.html || "");
 
     // Entitlements from backend; Admins can view both tabs regardless
@@ -353,13 +365,30 @@
     activateSub(firstKey);
   }
 
-  /* ------------------ Admin (Approvals + Branding + Handbook server editor) ------------------ */
+  /* ------------------ Admin (Leave Approvals + Account Approvals + Branding + Handbook) ------------------ */
   function renderAdmin() {
     const el = document.getElementById("panel");
     const brand = getBrand();
     const s = getSession();
 
     el.innerHTML = `
+      <!-- LEAVE APPROVALS -->
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div class="h2">Leave Approvals</div>
+          <div class="row" style="gap:8px">
+            <button class="btn" id="lvHelp">Columns?</button>
+            <button class="btn btn-blue" id="lvRefresh">Refresh</button>
+          </div>
+        </div>
+        <div id="lvError" class="kv" style="color:#b91c1c"></div>
+        <div class="space"></div>
+        <div class="list" id="lvList"><div class="kv">Loading…</div></div>
+      </div>
+
+      <div class="space-lg"></div>
+
+      <!-- ACCOUNT APPROVALS -->
       <div class="card">
         <div class="row" style="justify-content:space-between">
           <div class="h2">Admin — Approvals</div>
@@ -372,6 +401,7 @@
 
       <div class="space-lg"></div>
 
+      <!-- BRANDING & LINKS -->
       <div class="card">
         <div class="h2">Branding & Links</div>
         <div class="space"></div>
@@ -392,6 +422,7 @@
 
       <div class="space-lg"></div>
 
+      <!-- HANDBOOK (SERVER) -->
       <div class="card" id="hbServerCard">
         <div class="h2">Handbook HTML (Server)</div>
         <div class="kv">Edit the official HTML shown to staff. Mapping (who sees which subtab) comes from <b>Handbook</b> sheet (Email → Company). No HTML is stored in the sheet.</div>
@@ -416,7 +447,75 @@
       </div>
     `;
 
-    /* ---------- Approvals ---------- */
+    /* ---------- Leave Approvals UI ---------- */
+    const lvList   = document.getElementById("lvList");
+    const lvError  = document.getElementById("lvError");
+    document.getElementById("lvHelp").onclick = () => {
+      alert(
+`Leave sheet expectations:
+- Status (blank or "pending" shows here; "approved"/"rejected" is hidden)
+- Email, Name, Department (optional), Leave Type (optional), Half Day (optional)
+- Start Date, End Date
+- Submitted At (optional)
+Approving/Rejecting writes back to the Leave sheet.`
+      );
+    };
+    document.getElementById("lvRefresh").onclick = loadLeavePending;
+    loadLeavePending();
+
+    async function loadLeavePending() {
+      try {
+        lvError.textContent = "";
+        lvList.innerHTML = `<div class="kv">Loading…</div>`;
+        const res = await leaveListPending();
+        if (!res.ok) throw new Error(res.error || "Failed to load");
+        const items = res.items || [];
+        if (items.length === 0) {
+          lvList.innerHTML = `<div class="kv">No pending leave requests.</div>`;
+          return;
+        }
+        lvList.innerHTML = "";
+        items.forEach((it) => {
+          const div = document.createElement("div");
+          div.className = "item";
+          div.innerHTML = `
+            <div>
+              <div><b>${it.name || "(no name)"} — ${it.email || ""}</b></div>
+              <div class="meta">
+                ${it.dept ? (it.dept + " • ") : ""}${it.type || ""}${it.half ? (" • " + it.half) : ""}
+              </div>
+              <div class="meta">
+                ${it.start ? ("From: " + (new Date(it.start)).toLocaleDateString()) : ""}
+                ${it.end ? (" → To: " + (new Date(it.end)).toLocaleDateString()) : ""}
+                ${it.when ? (" • Submitted: " + (new Date(it.when)).toLocaleString()) : ""}
+              </div>
+            </div>
+            <div class="row" style="gap:6px">
+              <button class="btn" data-act="reject">Reject</button>
+              <button class="btn btn-green" data-act="approve">Approve</button>
+            </div>
+          `;
+          div.querySelector('[data-act="approve"]').onclick = async () => {
+            div.querySelector('[data-act="approve"]').disabled = true;
+            div.querySelector('[data-act="reject"]').disabled = true;
+            await leaveDecide(it.row, "approved").catch(err => alert("Error: " + err.message));
+            await loadLeavePending();
+          };
+          div.querySelector('[data-act="reject"]').onclick = async () => {
+            div.querySelector('[data-act="approve"]').disabled = true;
+            div.querySelector('[data-act="reject"]').disabled = true;
+            await leaveDecide(it.row, "rejected").catch(err => alert("Error: " + err.message));
+            await loadLeavePending();
+          };
+          lvList.appendChild(div);
+        });
+      } catch (err) {
+        lvError.textContent = String(err);
+        lvList.innerHTML = "";
+      }
+    }
+
+    /* ---------- Account Approvals (unchanged) ---------- */
     document.getElementById("refreshBtn").onclick = loadPending;
     async function loadPending() {
       try {
@@ -442,7 +541,7 @@
                 <option ${r.role === "Manager" ? "selected" : ""}>Manager</option>
                 <option ${r.role === "Owner"   ? "selected" : ""}>Owner</option>
               </select>
-              <button class="btn"          data-act="revoke">Revoke</button>
+              <button class="btn"           data-act="revoke">Revoke</button>
               <button class="btn btn-green" data-act="approve">Approve</button>
             </div>
           `;
