@@ -66,7 +66,7 @@ async function leaveDecide(row, decision) {
     logoRight: "https://files.catbox.moe/3j1q2a.png",
     logoSize: 120,
     checkInURL: "https://script.google.com/macros/s/AKfycbzc25tvKs-HZxH88HArzcOsY9E_dvscq5cQ9jcFm_srr39FpgWuUSuu4zKKM7yGpmlj/exec",
-    leaveURL:   "https://forms.gle/idkWEa9db5QwUAE3A",
+    leaveURL:   "https://forms.gle/NynP7Fjz1xoDKCEXA",
     cvURL:      "https://docs.google.com/forms/d/18PDSTMt6LP2h6yPpscdZ322-bjrDitKB669WD05ho4I/viewform",
     handbookHTML_RoverX_local: "",
     handbookHTML_Ninjas_local: "",
